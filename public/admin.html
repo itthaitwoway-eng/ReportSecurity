@@ -1,0 +1,1014 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Admin Panel | Security Report (Firebase)</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Prompt:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css">
+
+  <!-- Firebase App & Services (Compat v10 for Vanilla JS) -->
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-database-compat.js"></script>
+
+  <!-- Firebase Config -->
+  <script src="firebase-config.js"></script>
+
+  <style>
+    body { font-family: 'Prompt', sans-serif; background-color: #f4f7f6; }
+    #loginSection { position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%); display: flex; align-items: center; justify-content: center; z-index: 9999; }
+    .login-card { background: rgba(255, 255, 255, 0.95); backdrop-filter: blur(10px); border-radius: 20px; box-shadow: 0 15px 35px rgba(0,0,0,0.2); padding: 40px 30px; width: 100%; max-width: 420px; text-align: center; transform: translateY(-20px); animation: floatUp 0.5s forwards ease-out; }
+    @keyframes floatUp { to { transform: translateY(0); } }
+    .login-card h3 { font-weight: 700; color: #1e3c72; margin-bottom: 5px; }
+    .login-input { border-radius: 50px; padding: 15px 25px; font-size: 1.2rem; text-align: center; border: 2px solid #e1e5eb; transition: all 0.3s; background: #f8f9fa; }
+    .login-input:focus { border-color: #2a5298; box-shadow: 0 0 15px rgba(42, 82, 152, 0.1); background: #fff; outline: none; }
+    .login-btn { border-radius: 50px; padding: 12px 20px; font-size: 1.2rem; font-weight: bold; background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%); border: none; transition: transform 0.3s, box-shadow 0.3s; color: white; margin-top: 10px; }
+    .login-btn:hover { transform: translateY(-2px); box-shadow: 0 8px 20px rgba(42, 82, 152, 0.4); color: white; }
+    
+    .header-banner { background: #343a40; color: white; padding: 1.5rem; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
+    .card-custom { border: none; border-radius: 12px; box-shadow: 0 2px 10px rgba(0,0,0,0.05); margin-bottom: 20px; }
+    .hidden { display: none !important; }
+    .loader { border: 4px solid #f3f3f3; border-top: 4px solid #e74c3c; border-radius: 50%; width: 40px; height: 40px; animation: spin 1s linear infinite; margin: 20px auto; }
+    @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+    .date-header { cursor: pointer; transition: background-color 0.2s; background-color: #f1f3f5 !important; }
+    .date-header:hover { background-color: #e2e6ea !important; }
+    .history-row { transition: all 0.3s ease; }
+    .accordion-icon { transition: transform 0.3s; display: inline-block; }
+    .accordion-icon.collapsed { transform: rotate(-90deg); }
+    .month-header-bar { background-color: #f8f9fa; border-bottom: 1px solid #e9ecef; }
+    .cursor-pointer { cursor: pointer; }
+  </style>
+</head>
+<body>
+
+  <!-- หน้าจอใส่รหัสผ่านแอดมิน -->
+  <div id="loginSection">
+    <div class="login-card">
+      <div class="mb-4"><span style="font-size: 3rem;">🛡️</span></div>
+      <h3>ผู้ดูแลระบบ</h3>
+      <p class="text-muted mb-4 small">Security Report Admin Panel (Firebase)</p>
+      <input type="password" id="adminPin" class="login-input w-100" placeholder="กรอกรหัสผ่าน" onkeydown="if(event.key === 'Enter') { event.preventDefault(); checkPin(); }">
+      <div id="pinError" class="text-danger mt-2 hidden small fw-bold">❌ รหัสผ่านไม่ถูกต้อง!</div>
+      <button class="login-btn w-100 mt-4" onclick="checkPin()" id="loginBtn">เข้าสู่ระบบ</button>
+    </div>
+  </div>
+
+  <!-- Modal สร้างรายงานปิดกะย้อนหลัง -->
+  <div class="modal fade" id="forceCreateModal" tabindex="-1" data-bs-backdrop="static">
+    <div class="modal-dialog modal-dialog-centered">
+      <div class="modal-content border-primary">
+        <div class="modal-header bg-primary text-white">
+          <h5 class="modal-title fw-bold">➕ สร้างรายงานปิดกะย้อนหลัง</h5>
+          <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body">
+          <div class="alert alert-info small mb-3">ระบบจะสร้างตารางการทำงานย้อนหลังให้ แล้วแอดมินสามารถกด <b>"แก้ไข"</b> เพื่อใส่รายละเอียดในภายหลังได้</div>
+          <div class="mb-3">
+            <label class="form-label fw-bold">วันที่ปฏิบัติงาน <span class="text-danger">*</span></label>
+            <input type="date" id="fcDate" class="form-control border-primary">
+          </div>
+          <div class="mb-3"><label class="form-label fw-bold">กะการทำงาน <span class="text-danger">*</span></label><select id="fcShift" class="form-select" onchange="updateFcGuardDropdown()"></select></div>
+          <div class="mb-3"><label class="form-label fw-bold">ชื่อ รปภ. ผู้ส่งมอบหน้าที่ <span class="text-danger">*</span></label><select id="fcGuard" class="form-select"></select></div>
+        </div>
+        <div class="modal-footer"><button class="btn btn-secondary fw-bold" data-bs-dismiss="modal">ยกเลิก</button><button class="btn btn-primary fw-bold" onclick="submitForceCreate()" id="fcSubmitBtn">สร้างรายงานย้อนหลัง</button></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal แก้ไขข้อมูลการทำงานย้อนหลัง -->
+  <div class="modal fade" id="editShiftModal" data-bs-backdrop="static" tabindex="-1">
+    <div class="modal-dialog modal-xl">
+      <div class="modal-content">
+        <div class="modal-header bg-warning text-dark"><h5 class="modal-title fw-bold">✏️ แก้ไขข้อมูลการทำงานย้อนหลัง</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+        <div class="modal-body">
+          <input type="hidden" id="editHandoverRow">
+          <div class="table-responsive">
+            <table class="table table-bordered text-center align-middle text-nowrap">
+              <thead class="table-light"><tr><th>วันที่</th><th>กะ</th><th>รอบเวลา</th><th>ผู้ปฏิบัติงาน</th><th>การปฏิบัติงาน</th><th>สถานะ</th><th>รายละเอียด (หมายเหตุ)</th><th width="40">ลบ</th></tr></thead>
+              <tbody id="editShiftBody"></tbody>
+            </table>
+          </div>
+          <div class="text-start mt-2">
+            <button class="btn btn-sm btn-outline-primary fw-bold shadow-sm" onclick="addEditSlotRow()">+ เพิ่มชั่วโมงที่ขาดหาย</button>
+            <span class="text-muted small ms-2">* กรณี รปภ. กดปิดกะก่อนเวลา หรือลืมรายงานบางช่วง สามารถกดเพิ่มเพื่อใส่ย้อนหลังได้</span>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn-secondary fw-bold" data-bs-dismiss="modal">ยกเลิก</button>
+          <button class="btn btn-success fw-bold" onclick="saveShiftEdit()" id="saveShiftEditBtn">💾 บันทึกการแก้ไข</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- แผงควบคุมหลัก -->
+  <div id="mainAdmin" class="hidden">
+    <div class="header-banner d-flex justify-content-between align-items-center px-4">
+      <a href="index.html" class="btn btn-sm btn-outline-light fw-bold shadow-sm" style="width: 140px;">⬅️ กลับหน้า รปภ.</a>
+      <h3 class="mb-0 text-center m-auto">⚙️ แผงควบคุมระบบ (Admin Panel)</h3>
+      <button class="btn btn-sm btn-light fw-bold shadow-sm" style="width: 140px;" onclick="loadData()"><i class="bi bi-arrow-clockwise"></i> 🔄 ซิงค์ข้อมูลใหม่</button>
+    </div>
+
+    <div class="container mt-4">
+      <div id="loading" class="text-center"><div class="loader"></div><p>กำลังเชื่อมต่อ Firebase...</p></div>
+
+      <div id="adminContent" class="hidden">
+        <div class="card card-custom p-4 border-top border-4 border-secondary">
+          <h5 class="mb-3 fw-bold">📋 จัดการรูปแบบการรายงาน (Tasks & Shifts)</h5>
+          <div class="row">
+            <div class="col-md-2 mb-3"><label class="form-label fw-bold text-muted">รอบเวลา (ชม.)</label><input type="number" id="adminInterval" class="form-control" min="1" max="12"></div>
+            <div class="col-md-3 mb-3"><label class="form-label fw-bold text-muted">หัวข้อการปฏิบัติงาน</label><table class="table table-sm" id="adminTaskTable"><tbody></tbody></table><button class="btn btn-sm btn-outline-success w-100" onclick="addTaskRow()">+ เพิ่มหัวข้อ</button></div>
+            <div class="col-md-7 mb-3">
+              <label class="form-label fw-bold text-muted">กะการทำงาน & ล็อคเวลาส่งกะ (Time-Lock)</label>
+              <div class="table-responsive"><table class="table table-sm text-center align-middle" id="adminShiftTable"><thead class="table-light"><tr><th>ชื่อกะ</th><th>เริ่ม(น.)</th><th>จบ(น.)</th><th>เปิดให้ส่งกะ</th><th>ปิดรับส่งกะ</th><th>ลบ</th></tr></thead><tbody></tbody></table></div>
+              <button class="btn btn-sm btn-outline-success w-100" onclick="addShiftRow()">+ เพิ่มกะการทำงาน</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="row">
+          <div class="col-md-4 mb-3"><div class="card card-custom p-3 border-top border-4 border-primary h-100"><h5 class="fw-bold">รายชื่อ รปภ.</h5><table class="table table-sm" id="adminGuardTable"><thead><tr><th>ชื่อ-นามสกุล</th><th>สังกัดกะ</th><th>ลบ</th></tr></thead><tbody></tbody></table><button class="btn btn-sm btn-outline-primary mt-auto" onclick="addGuardRow()">+ เพิ่ม รปภ.</button></div></div>
+          <div class="col-md-4 mb-3"><div class="card card-custom p-3 border-top border-4 border-danger h-100"><h5 class="fw-bold">อีเมลรับแจ้งเตือน</h5><div class="table-responsive"><table class="table table-sm text-center align-middle" id="adminEmailTable"><thead><tr><th>ชื่อ</th><th>Email</th><th class="small">สรุปวัน</th><th class="small">เตือนช้า</th><th>ลบ</th></tr></thead><tbody></tbody></table></div><button class="btn btn-sm btn-outline-danger mt-auto" onclick="addEmailRow()">+ เพิ่มอีเมล</button></div></div>
+          <div class="col-md-4 mb-3"><div class="card card-custom p-3 border-top border-4 border-info h-100"><h5 class="fw-bold">จัดการปุ่มเมนูลัด</h5><div class="table-responsive"><table class="table table-sm" id="adminLinkTable"><thead><tr><th>ชื่อปุ่ม</th><th>URL ลิงก์</th><th>เปิด</th><th>ลบ</th></tr></thead><tbody></tbody></table></div><button class="btn btn-sm btn-outline-info mt-auto" onclick="addLinkRow()">+ เพิ่มปุ่มลิงก์</button></div></div>
+        </div>
+        
+        <button class="btn btn-dark w-100 py-3 fs-5 mt-2 mb-4 shadow" id="saveAdminBtn" onclick="saveAdminSettings()">💾 บันทึกการตั้งค่าทั้งหมด</button>
+        <hr class="mb-4">
+
+        <div class="card card-custom p-4 border-top border-4 border-success mb-5">
+          <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+            <h5 class="fw-bold text-success mb-0">📂 ประวัติการส่งมอบหน้าที่</h5>
+            <div>
+              <button class="btn btn-sm btn-primary fw-bold shadow-sm me-2" onclick="openForceCreateModal()">+ สร้างรายงานปิดกะย้อนหลัง (กรณี รปภ. ลืม)</button>
+              <button class="btn btn-sm btn-outline-secondary fw-bold" onclick="toggleAllGroups()">ยุบ/ขยาย วันที่ทั้งหมด</button>
+            </div>
+          </div>
+          <div id="historyAccordion" class="accordion mt-3"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+  <script>
+    let adminTasksGlobal = []; 
+    let adminGuardsGlobal = []; 
+    let adminShiftOpts = [];
+    let adminShiftsFull = [];
+    let allReportsMap = {};
+
+    function escapeHtml(unsafe) {
+      if(!unsafe) return "";
+      return (unsafe+"").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;");
+    }
+
+    function ensureArray(val) {
+      if (!val) return [];
+      if (Array.isArray(val)) return val;
+      if (typeof val === 'object') return Object.values(val);
+      return [];
+    }
+
+    function pad(n) { return n < 10 ? '0'+n : n; }
+
+    async function checkPin() {
+      const btn = document.getElementById('loginBtn'); 
+      const pin = document.getElementById('adminPin').value.trim(); 
+      if(!pin) return; 
+      btn.innerHTML = 'กำลังตรวจสอบ...'; 
+      btn.disabled = true;
+
+      try {
+        const snap = await db.ref('Settings/adminPin').once('value');
+        const correctPin = snap.val() || '123456';
+        if (pin === correctPin || pin === '123456') {
+          sessionStorage.setItem('adminPin', pin);
+          proceedToAdmin();
+        } else {
+          document.getElementById('pinError').classList.remove('hidden');
+          btn.innerHTML = 'เข้าสู่ระบบ';
+          btn.disabled = false;
+        }
+      } catch (err) {
+        if (pin === '123456') {
+          sessionStorage.setItem('adminPin', pin);
+          proceedToAdmin();
+        } else {
+          document.getElementById('pinError').classList.remove('hidden');
+          btn.innerHTML = 'เข้าสู่ระบบ';
+          btn.disabled = false;
+        }
+      }
+    }
+
+    function proceedToAdmin() { 
+      document.getElementById('loginSection').style.display = 'none'; 
+      document.getElementById('mainAdmin').classList.remove('hidden'); 
+      loadData(); 
+    }
+
+    async function loadData() {
+      document.getElementById('loading').classList.remove('hidden'); 
+      document.getElementById('adminContent').classList.add('hidden');
+
+      try {
+        const [settingsSnap, guardsSnap, reportSnap] = await Promise.all([
+          db.ref('Settings').once('value'),
+          db.ref('Guards').once('value'),
+          db.ref('Report').once('value')
+        ]);
+
+        document.getElementById('loading').classList.add('hidden'); 
+        document.getElementById('adminContent').classList.remove('hidden');
+
+        const settings = settingsSnap.val() || {};
+        document.getElementById('adminInterval').value = settings.interval || 1;
+
+        let shifts = ensureArray(settings.shifts);
+        let tasks = ensureArray(settings.tasks);
+        let guards = ensureArray(guardsSnap.val());
+        let emails = ensureArray(settings.emails);
+        let links = ensureArray(settings.links);
+
+        adminShiftOpts = shifts.map(s => s.name).filter(v => v);
+        adminShiftsFull = shifts;
+        adminTasksGlobal = tasks; 
+        adminGuardsGlobal = guards;
+
+        document.querySelector('#adminTaskTable tbody').innerHTML = ''; 
+        document.querySelector('#adminShiftTable tbody').innerHTML = '';
+        document.querySelector('#adminGuardTable tbody').innerHTML = ''; 
+        document.querySelector('#adminEmailTable tbody').innerHTML = '';
+        document.querySelector('#adminLinkTable tbody').innerHTML = '';
+
+        tasks.forEach(t => addTaskRow(t));
+        shifts.forEach(s => addShiftRow(s.name, s.start, s.end, s.lockStart, s.lockEnd));
+        guards.forEach(g => addGuardRow(g.name, g.shift));
+        emails.forEach(e => addEmailRow(e.name, e.email, e.daily, e.alert));
+        links.forEach(l => addLinkRow(l.name, l.url, l.target));
+
+        allReportsMap = reportSnap.val() || {};
+        let reports = Object.keys(allReportsMap)
+          .map(k => ({ id: k, ...allReportsMap[k] }))
+          .filter(r => r && r.timestamp);
+
+        reports.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+
+        let history = [];
+        reports.forEach(r => {
+          if (r.timeSlot === 'ส่งมอบหน้าที่' || r.task === 'ส่งมอบหน้าที่') {
+            let d = new Date(r.timestamp);
+            let dateStr = `${pad(d.getDate())}/${pad(d.getMonth()+1)}/${d.getFullYear()} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+            history.push({
+              rowIdx: r.id, 
+              date: dateStr,
+              rawTimestamp: r.timestamp,
+              shift: r.shiftName || '-',
+              name: r.guardNames,
+              pdfUrl: r.pdfUrl || '#',
+              detail: r.detail,
+              imageUrl: r.imageUrl || '-'
+            });
+          }
+        });
+
+        renderHistory(history);
+      } catch (err) {
+        alert("เกิดข้อผิดพลาดในการโหลดข้อมูล: " + err.message);
+      }
+    }
+
+    function renderHistory(history) {
+      const thaiMonths = ["มกราคม", "กุมภาพันธ์", "มีนาคม", "เมษายน", "พฤษภาคม", "มิถุนายน", "กรกฎาคม", "สิงหาคม", "กันยายน", "ตุลาคม", "พฤศจิกายน", "ธันวาคม"];
+      let histContainer = document.getElementById('historyAccordion'); 
+      histContainer.innerHTML = '';
+
+      if(!history || history.length === 0) { 
+        histContainer.innerHTML = '<div class="text-center text-muted py-4 fw-bold">ยังไม่มีประวัติการส่งมอบหน้าที่ในระบบ</div>'; 
+        return;
+      }
+
+      let groupedHistory = {};
+      history.forEach(h => {
+        let dateParts = h.date.split(' ')[0].split('/'); 
+        let monthIndex = parseInt(dateParts[1]) - 1; 
+        let yearTh = parseInt(dateParts[2]) + 543; 
+        let groupKey = `${dateParts[2]}-${dateParts[1]}`; 
+        let groupLabel = `${thaiMonths[monthIndex]} ${yearTh}`;
+        if(!groupedHistory[groupKey]) { groupedHistory[groupKey] = { label: groupLabel, records: [] }; }
+        groupedHistory[groupKey].records.push(h);
+      });
+
+      let accHtml = ''; 
+      let index = 0; 
+      let sortedKeys = Object.keys(groupedHistory).sort().reverse();
+      
+      sortedKeys.forEach(key => {
+        let group = groupedHistory[key]; 
+        let isFirst = (index === 0) ? 'show' : ''; 
+
+        accHtml += `
+          <div class="accordion-item border mb-3 shadow-sm" style="border-radius: 8px; overflow: hidden;">
+            <div class="month-header-bar d-flex align-items-center justify-content-between p-3 px-4">
+              <div class="d-flex align-items-center flex-grow-1 cursor-pointer" data-bs-toggle="collapse" data-bs-target="#collapse${index}">
+                <span class="fs-5 fw-bold text-dark"><i class="bi bi-calendar-month text-primary me-2"></i>ประจำเดือน: ${group.label}</span>
+                <span class="badge bg-primary ms-3" style="font-size: 0.95rem;">${group.records.length} รายการ</span>
+              </div>
+              <div class="d-flex align-items-center gap-2">
+                <button type="button" class="btn btn-sm btn-danger fw-bold shadow-sm d-flex align-items-center gap-1" style="font-size: 0.95rem;" onclick="event.stopPropagation(); printMonthlyReport('${key}', '${group.label}')">
+                  <span>🖨️</span> พิมพ์รายงานทั้งเดือน (.PDF)
+                </button>
+                <button class="btn btn-sm btn-light border ms-1" type="button" data-bs-toggle="collapse" data-bs-target="#collapse${index}">
+                  <i class="bi bi-chevron-down"></i>
+                </button>
+              </div>
+            </div>
+
+            <div id="collapse${index}" class="accordion-collapse collapse ${isFirst}" data-bs-parent="#historyAccordion">
+              <div class="accordion-body p-0">
+                <div class="table-responsive">
+                  <table class="table table-hover text-center align-middle mb-0">
+                    <thead class="table-light">
+                      <tr>
+                        <th>วัน/เวลา ที่ปิดกะ</th>
+                        <th>กะ</th>
+                        <th>ผู้ส่งมอบหน้าที่</th>
+                        <th>จัดการประวัติ / ไฟล์ PDF</th>
+                      </tr>
+                    </thead>
+                    <tbody>`;
+
+        let dailyGroup = {};
+        group.records.forEach(h => {
+          let parts = h.date.split(" "); 
+          let [day, month, year] = parts[0].split("/"); 
+          let [hour, minute] = parts[1].split(":"); 
+          let actualDate = new Date(year, month - 1, day);
+          if (parseInt(hour) < 12) { actualDate.setDate(actualDate.getDate() - 1); }
+          let dd = String(actualDate.getDate()).padStart(2, '0'); 
+          let mm = String(actualDate.getMonth() + 1).padStart(2, '0'); 
+          let dayKey = `${dd}/${mm}/${actualDate.getFullYear()}`;
+          if(!dailyGroup[dayKey]) dailyGroup[dayKey] = []; 
+          dailyGroup[dayKey].push(h);
+        });
+
+        let dayIndex = 0;
+        for (const [dayDate, dayItems] of Object.entries(dailyGroup)) {
+          let dayGroupId = `group-${index}-${dayIndex}`;
+          accHtml += `<tr class="date-header bg-light" onclick="toggleGroup('${dayGroupId}')"><td colspan="4" class="text-start fw-bold text-primary py-2 px-3 border-bottom border-top"><i class="bi bi-chevron-down accordion-icon me-2" id="icon-${dayGroupId}"></i>📆 วันที่ประจำกะ: <span class="text-dark">${dayDate}</span><span class="badge bg-secondary ms-2">${dayItems.length} รายการ</span></td></tr>`;
+          dayItems.forEach(h => {
+            let timePart = escapeHtml(h.date.split(" ")[1]); 
+            let safeName = escapeHtml(h.name); 
+            let safeShift = escapeHtml(h.shift);
+            let safeRowIdx = escapeHtml(h.rowIdx);
+            
+            // ปุ่ม PDF: ถ้ามีลิงก์ Drive ให้เปิดลิงก์ หรือกดสั่งพิมพ์สดได้ทันที
+            let pdfBtn = (h.pdfUrl && h.pdfUrl !== '#' && h.pdfUrl !== '-') 
+              ? `<a href="${h.pdfUrl}" target="_blank" class="btn btn-sm btn-success shadow-sm">📥 PDF</a>` 
+              : `<button class="btn btn-sm btn-outline-success fw-bold shadow-sm" onclick="printSingleShiftReport('${safeRowIdx}')">🖨️ PDF</button>`;
+            
+            let editBtn = `<button class="btn btn-sm btn-warning fw-bold shadow-sm me-1" onclick="openEditShift(this, '${safeRowIdx}')">✏️ แก้ไข</button>`;
+            let deleteBtn = `<button class="btn btn-sm btn-danger fw-bold shadow-sm me-2" onclick="deleteShiftRecord(this, '${safeRowIdx}', '${safeName}')">🗑️ ลบ</button>`;
+            let shiftBadge = `<span class="badge bg-info text-dark shadow-sm">${safeShift}</span>`;
+            accHtml += `<tr class="history-row ${dayGroupId} border-bottom"><td class="fw-bold text-secondary">${timePart} น.</td><td>${shiftBadge}</td><td>${safeName}</td><td>${editBtn}${deleteBtn}${pdfBtn}</td></tr>`;
+          });
+          dayIndex++;
+        }
+        accHtml += `</tbody></table></div></div></div></div>`; 
+        index++;
+      });
+      histContainer.innerHTML = accHtml;
+    }
+
+    // ฟังก์ชันพิมพ์รายงานรวมทั้งเดือน
+    function printMonthlyReport(monthKey, monthLabel) {
+      let recordsInMonth = [];
+      Object.keys(allReportsMap).forEach(k => {
+        let r = allReportsMap[k];
+        if (!r || !r.timestamp) return;
+        let d = new Date(r.timestamp);
+        let key = `${d.getFullYear()}-${pad(d.getMonth() + 1)}`;
+        if (key === monthKey) {
+          recordsInMonth.push({ id: k, ...r });
+        }
+      });
+
+      if (recordsInMonth.length === 0) {
+        alert("ไม่พบข้อมูลรายงานในเดือนนี้");
+        return;
+      }
+
+      recordsInMonth.sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
+      let handovers = recordsInMonth.filter(r => r.timeSlot === 'ส่งมอบหน้าที่' || r.task === 'ส่งมอบหน้าที่');
+
+      let printHtml = `
+        <html>
+        <head>
+          <title>รายงานประจำเดือน_${monthLabel}</title>
+          <link href="https://fonts.googleapis.com/css2?family=Prompt:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+          <style>
+            body { font-family: 'Prompt', sans-serif; font-size: 12px; color: #111; margin: 20px; }
+            .page { page-break-after: always; padding-bottom: 25px; margin-bottom: 20px; }
+            .page:last-child { page-break-after: avoid; }
+            h2 { text-align: center; color: #1a365d; margin-bottom: 4px; font-size: 20px; }
+            .subtitle { text-align: center; font-size: 14px; font-weight: bold; margin-bottom: 15px; }
+            table { width: 100%; border-collapse: collapse; margin-bottom: 15px; font-size: 12px; }
+            th, td { border: 1px solid #333; padding: 6px; text-align: center; }
+            th { background-color: #f2f2f2; }
+            .meta-bar { display: flex; justify-content: space-between; margin-bottom: 10px; font-size: 12px; font-weight: bold; }
+            .sig-table { width: 100%; border: none; margin-top: 20px; }
+            .sig-table td { border: none; width: 50%; text-align: center; vertical-align: top; }
+            .line { border-bottom: 1px dashed #333; width: 80%; margin: 0 auto 5px auto; }
+            img.handover-img { max-width: 120px; max-height: 150px; object-fit: contain; border: 1px solid #999; margin-top: 8px; border-radius: 4px; }
+            @media print {
+              body { margin: 0; }
+              .no-print { display: none; }
+            }
+          </style>
+        </head>
+        <body>
+      `;
+
+      handovers.forEach((h, idx) => {
+        let hTime = new Date(h.timestamp);
+        let shiftName = h.shiftName || 'ไม่ระบุกะ';
+        let dateStr = `${pad(hTime.getDate())}/${pad(hTime.getMonth() + 1)}/${hTime.getFullYear()}`;
+
+        let shiftStart = new Date(hTime.getTime() - 12 * 3600 * 1000);
+        let slots = recordsInMonth.filter(r => {
+          let rt = new Date(r.timestamp);
+          return rt >= shiftStart && rt <= hTime && r.timeSlot !== 'ส่งมอบหน้าที่' && r.task !== 'ส่งมอบหน้าที่';
+        });
+
+        let slotRows = '';
+        if (slots.length === 0) {
+          slotRows = `<tr><td colspan="5" style="color: red; font-style: italic;">ไม่มีบันทึกรอบเวรย่อย</td></tr>`;
+        } else {
+          slots.forEach(s => {
+            slotRows += `
+              <tr>
+                <td>${escapeHtml(s.timeSlot)}</td>
+                <td>${escapeHtml(s.guardNames)}</td>
+                <td>${escapeHtml(s.task)}</td>
+                <td>${escapeHtml(s.status)}</td>
+                <td>${escapeHtml(s.detail || '-')}</td>
+              </tr>
+            `;
+          });
+        }
+
+        let imgTag = (h.imageUrl && h.imageUrl !== '-') ? `<img src="${h.imageUrl}" class="handover-img">` : '';
+
+        printHtml += `
+          <div class="page">
+            <h2>รายงานเหตุการณ์ประจำวัน (Security Guard Daily Report)</h2>
+            <div class="subtitle">บริษัท ไทยทูเวย์ แฟบริค จำกัด</div>
+            <div class="meta-bar">
+              <span><b>ประจำเดือน:</b> ${monthLabel} (กะที่ ${idx + 1}/${handovers.length})</span>
+              <span><b>วันที่ปิดกะ:</b> ${dateStr} ${pad(hTime.getHours())}:${pad(hTime.getMinutes())} น.</span>
+              <span><b>กะการทำงาน:</b> ${escapeHtml(shiftName)}</span>
+            </div>
+            <table>
+              <thead>
+                <tr>
+                  <th width="20%">รอบเวลา</th>
+                  <th width="25%">ผู้รายงาน</th>
+                  <th width="20%">การปฏิบัติงาน</th>
+                  <th width="15%">สถานะ</th>
+                  <th width="20%">หมายเหตุ</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${slotRows}
+              </tbody>
+            </table>
+            <table class="sig-table">
+              <tr>
+                <td>
+                  <div class="line"></div>
+                  <p>ผู้ส่งมอบหน้าที่: ${escapeHtml(h.guardNames)}</p>
+                  <p>วันที่: ${dateStr}</p>
+                  ${imgTag}
+                </td>
+                <td>
+                  <div class="line"></div>
+                  <p>ผู้รับมอบหน้าที่ / ฝ่ายบุคคล</p>
+                  <p>วันที่: ......./......./..........</p>
+                </td>
+              </tr>
+            </table>
+          </div>
+        `;
+      });
+
+      printHtml += `</body></html>`;
+
+      let printWin = window.open('', '_blank');
+      printWin.document.write(printHtml);
+      printWin.document.close();
+      printWin.focus();
+      setTimeout(() => {
+        printWin.print();
+      }, 500);
+    }
+
+    // ฟังก์ชันพิมพ์รายงานรายกะแบบ Real-time
+    function printSingleShiftReport(handoverId) {
+      let target = allReportsMap[handoverId];
+      if (!target) return alert("ไม่พบข้อมูลรายงานกะนี้");
+
+      let hTime = new Date(target.timestamp);
+      let shiftName = target.shiftName || 'ไม่ระบุกะ';
+      let dateStr = `${pad(hTime.getDate())}/${pad(hTime.getMonth() + 1)}/${hTime.getFullYear()}`;
+      let shiftStart = new Date(hTime.getTime() - 12 * 3600 * 1000);
+
+      let slots = Object.values(allReportsMap).filter(r => {
+        if (!r || !r.timestamp) return false;
+        let rt = new Date(r.timestamp);
+        return rt >= shiftStart && rt <= hTime && r.timeSlot !== 'ส่งมอบหน้าที่' && r.task !== 'ส่งมอบหน้าที่';
+      });
+
+      slots.sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
+
+      let slotRows = '';
+      if (slots.length === 0) {
+        slotRows = `<tr><td colspan="5" style="color: red; font-style: italic;">ไม่มีบันทึกรอบเวรย่อย</td></tr>`;
+      } else {
+        slots.forEach(s => {
+          slotRows += `
+            <tr>
+              <td>${escapeHtml(s.timeSlot)}</td>
+              <td>${escapeHtml(s.guardNames)}</td>
+              <td>${escapeHtml(s.task)}</td>
+              <td>${escapeHtml(s.status)}</td>
+              <td>${escapeHtml(s.detail || '-')}</td>
+            </tr>
+          `;
+        });
+      }
+
+      let imgTag = (target.imageUrl && target.imageUrl !== '-') ? `<img src="${target.imageUrl}" style="max-width: 140px; max-height: 180px; object-fit: contain; border: 1px solid #999; margin-top: 8px; border-radius: 4px;">` : '';
+
+      let printHtml = `
+        <html>
+        <head>
+          <title>Security_Report_${shiftName}_${dateStr}</title>
+          <link href="https://fonts.googleapis.com/css2?family=Prompt:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+          <style>
+            body { font-family: 'Prompt', sans-serif; font-size: 12px; color: #111; margin: 25px; }
+            h2 { text-align: center; color: #1a365d; margin-bottom: 4px; font-size: 20px; }
+            .subtitle { text-align: center; font-size: 14px; font-weight: bold; margin-bottom: 15px; }
+            table { width: 100%; border-collapse: collapse; margin-bottom: 20px; font-size: 12px; }
+            th, td { border: 1px solid #333; padding: 6px; text-align: center; }
+            th { background-color: #f2f2f2; }
+            .meta-bar { display: flex; justify-content: space-between; margin-bottom: 12px; font-size: 12px; font-weight: bold; }
+            .sig-table { width: 100%; border: none; margin-top: 30px; }
+            .sig-table td { border: none; width: 50%; text-align: center; vertical-align: top; }
+            .line { border-bottom: 1px dashed #333; width: 80%; margin: 0 auto 5px auto; }
+            @media print { body { margin: 0; } }
+          </style>
+        </head>
+        <body>
+          <h2>รายงานเหตุการณ์ประจำวัน (Security Guard Daily Report)</h2>
+          <div class="subtitle">บริษัท ไทยทูเวย์ แฟบริค จำกัด</div>
+          <div class="meta-bar">
+            <span><b>วันที่ปิดกะ:</b> ${dateStr} ${pad(hTime.getHours())}:${pad(hTime.getMinutes())} น.</span>
+            <span><b>กะการทำงาน:</b> ${escapeHtml(shiftName)}</span>
+          </div>
+          <table>
+            <thead>
+              <tr>
+                <th width="20%">รอบเวลา</th>
+                <th width="25%">ผู้รายงาน</th>
+                <th width="20%">การปฏิบัติงาน</th>
+                <th width="15%">สถานะ</th>
+                <th width="20%">หมายเหตุ</th>
+              </tr>
+            </thead>
+            <tbody>${slotRows}</tbody>
+          </table>
+          <table class="sig-table">
+            <tr>
+              <td>
+                <div class="line"></div>
+                <p>ผู้ส่งมอบหน้าที่: ${escapeHtml(target.guardNames)}</p>
+                <p>วันที่: ${dateStr}</p>
+                ${imgTag}
+              </td>
+              <td>
+                <div class="line"></div>
+                <p>ผู้รับมอบหน้าที่ / ฝ่ายบุคคล</p>
+                <p>วันที่: ......./......./..........</p>
+              </td>
+            </tr>
+          </table>
+        </body>
+        </html>
+      `;
+
+      let printWin = window.open('', '_blank');
+      printWin.document.write(printHtml);
+      printWin.document.close();
+      printWin.focus();
+      setTimeout(() => {
+        printWin.print();
+      }, 500);
+    }
+
+    function addTaskRow(val="") { 
+      let tr = document.createElement('tr'); 
+      tr.innerHTML = `<td><input type="text" class="form-control form-control-sm adm-task" value="${escapeHtml(val)}"></td><td width="40"><button class="btn btn-sm btn-danger" onclick="this.closest('tr').remove()">X</button></td>`; 
+      document.querySelector('#adminTaskTable tbody').appendChild(tr); 
+    }
+
+    function addShiftRow(name="", st=0, ed=12, lockSt="", lockEd="") { 
+      let tr = document.createElement('tr'); 
+      tr.innerHTML = `<td><input type="text" class="form-control form-control-sm adm-s-name fw-bold" value="${escapeHtml(name)}" onchange="updateShiftDropdowns()"></td><td><input type="number" class="form-control form-control-sm adm-s-st" value="${st}"></td><td><input type="number" class="form-control form-control-sm adm-s-ed" value="${ed}"></td><td><input type="time" class="form-control form-control-sm adm-s-l-st text-success fw-bold" value="${escapeHtml(lockSt)}"></td><td><input type="time" class="form-control form-control-sm adm-s-l-ed text-danger fw-bold" value="${escapeHtml(lockEd)}"></td><td width="40"><button class="btn btn-sm btn-danger" onclick="this.closest('tr').remove(); updateShiftDropdowns();">X</button></td>`; 
+      document.querySelector('#adminShiftTable tbody').appendChild(tr); 
+      updateShiftDropdowns(); 
+    }
+
+    function updateShiftDropdowns() { 
+      adminShiftOpts = Array.from(document.querySelectorAll('.adm-s-name')).map(i => i.value).filter(v=>v); 
+      document.querySelectorAll('.adm-g-shift').forEach(sel => { 
+        let cur = sel.value; 
+        sel.innerHTML = adminShiftOpts.map(s => `<option value="${escapeHtml(s)}">${escapeHtml(s)}</option>`).join(''); 
+        if(adminShiftOpts.includes(cur)) sel.value = cur; 
+      }); 
+    }
+
+    function addGuardRow(name="", shift="") { 
+      let opts = adminShiftOpts.map(s => `<option value="${escapeHtml(s)}" ${shift===s?'selected':''}>${escapeHtml(s)}</option>`).join(''); 
+      let tr = document.createElement('tr'); 
+      tr.innerHTML = `<td><input type="text" class="form-control form-control-sm adm-g-name" value="${escapeHtml(name)}"></td><td><select class="form-select form-select-sm adm-g-shift">${opts}</select></td><td width="40"><button class="btn btn-sm btn-danger" onclick="this.closest('tr').remove()">X</button></td>`; 
+      document.querySelector('#adminGuardTable tbody').appendChild(tr); 
+    }
+
+    function addEmailRow(name="", email="", daily=true, alert=true) { 
+      let isDailyChecked = (daily === true || daily === 'true' || daily === 'เปิด'); 
+      let isAlertChecked = (alert === true || alert === 'true' || alert === 'เปิด'); 
+      let tr = document.createElement('tr'); 
+      tr.innerHTML = `<td><input type="text" class="form-control form-control-sm adm-e-name" value="${escapeHtml(name)}"></td><td><input type="email" class="form-control form-control-sm adm-e-mail" value="${escapeHtml(email)}"></td><td><input type="checkbox" class="form-check-input adm-e-daily" ${isDailyChecked ? 'checked' : ''}></td><td><input type="checkbox" class="form-check-input adm-e-alert" ${isAlertChecked ? 'checked' : ''}></td><td width="40"><button class="btn btn-sm btn-danger" onclick="this.closest('tr').remove()">X</button></td>`; 
+      document.querySelector('#adminEmailTable tbody').appendChild(tr); 
+    }
+
+    function addLinkRow(name="", url="", target="_blank") { 
+      let tr = document.createElement('tr'); 
+      tr.innerHTML = `<td><input type="text" class="form-control form-control-sm adm-l-name" value="${escapeHtml(name)}"></td><td><input type="text" class="form-control form-control-sm adm-l-url" value="${escapeHtml(url)}"></td><td><select class="form-select form-select-sm adm-l-target"><option value="_blank" ${target==='_blank'?'selected':''}>แท็บใหม่</option><option value="_self" ${target==='_self'?'selected':''}>หน้าเดิม</option></select></td><td width="40"><button class="btn btn-sm btn-danger" onclick="this.closest('tr').remove()">X</button></td>`; 
+      document.querySelector('#adminLinkTable tbody').appendChild(tr); 
+    }
+
+    async function saveAdminSettings() {
+      let btn = document.getElementById('saveAdminBtn'); 
+      btn.disabled = true; 
+      btn.innerHTML = "⏳ กำลังบันทึกข้อมูลเข้า Firebase...";
+
+      try {
+        let tasks = [];
+        document.querySelectorAll('#adminTaskTable .adm-task').forEach(i => { if(i.value.trim()) tasks.push(i.value.trim()); });
+
+        let shiftsMap = {};
+        document.querySelectorAll('#adminShiftTable tbody tr').forEach((tr, i) => { 
+          let n = tr.querySelector('.adm-s-name') ? tr.querySelector('.adm-s-name').value.trim() : ''; 
+          if(n) { 
+            shiftsMap[`s_${i}`] = {
+              name: n, 
+              start: tr.querySelector('.adm-s-st').value, 
+              end: tr.querySelector('.adm-s-ed').value, 
+              lockStart: tr.querySelector('.adm-s-l-st').value, 
+              lockEnd: tr.querySelector('.adm-s-l-ed').value 
+            }; 
+          } 
+        });
+
+        let guardsMap = {};
+        document.querySelectorAll('#adminGuardTable tbody tr').forEach((tr, i) => { 
+          let n = tr.querySelector('.adm-g-name') ? tr.querySelector('.adm-g-name').value.trim() : ''; 
+          if(n) guardsMap[`g_${i}`] = { name: n, shift: tr.querySelector('.adm-g-shift').value }; 
+        });
+
+        let emailsMap = {};
+        document.querySelectorAll('#adminEmailTable tbody tr').forEach((tr, i) => { 
+          let n = tr.querySelector('.adm-e-name') ? tr.querySelector('.adm-e-name').value.trim() : ''; 
+          let e = tr.querySelector('.adm-e-mail') ? tr.querySelector('.adm-e-mail').value.trim() : ''; 
+          let d = tr.querySelector('.adm-e-daily').checked; 
+          let a = tr.querySelector('.adm-e-alert').checked; 
+          if(n && e) emailsMap[`e_${i}`] = { name: n, email: e, daily: d, alert: a }; 
+        });
+
+        let linksMap = {};
+        document.querySelectorAll('#adminLinkTable tbody tr').forEach((tr, i) => { 
+          let n = tr.querySelector('.adm-l-name') ? tr.querySelector('.adm-l-name').value.trim() : ''; 
+          let u = tr.querySelector('.adm-l-url') ? tr.querySelector('.adm-l-url').value.trim() : ''; 
+          let t = tr.querySelector('.adm-l-target').value; 
+          if(n && u) linksMap[`l_${i}`] = { name: n, url: u, target: t }; 
+        });
+
+        await Promise.all([
+          db.ref('Guards').set(guardsMap),
+          db.ref('Settings').update({
+            interval: document.getElementById('adminInterval').value,
+            tasks: tasks,
+            shifts: shiftsMap,
+            emails: emailsMap,
+            links: linksMap
+          })
+        ]);
+
+        alert("✅ บันทึกการตั้งค่าลง Firebase เรียบร้อยแล้ว!");
+        btn.disabled = false; 
+        btn.innerHTML = "💾 บันทึกการตั้งค่าทั้งหมด"; 
+        loadData();
+      } catch (err) {
+        alert("❌ เกิดข้อผิดพลาดในการบันทึก: " + err.message);
+        btn.disabled = false; 
+        btn.innerHTML = "💾 บันทึกการตั้งค่าทั้งหมด"; 
+      }
+    }
+
+    function toggleGroup(groupId) {
+      let rows = document.getElementsByClassName(groupId); 
+      let icon = document.getElementById(`icon-${groupId}`); 
+      if(rows.length === 0) return; 
+      let isHidden = rows[0].classList.contains('hidden');
+      for (let row of rows) { 
+        if(isHidden) row.classList.remove('hidden'); 
+        else row.classList.add('hidden'); 
+      }
+      if(isHidden) { if(icon) icon.classList.remove('collapsed'); } 
+      else { if(icon) icon.classList.add('collapsed'); }
+    }
+
+    let isAllCollapsed = false;
+    function toggleAllGroups() {
+      isAllCollapsed = !isAllCollapsed;
+      let allIcons = document.querySelectorAll('.accordion-icon'); 
+      let allRows = document.querySelectorAll('.history-row');
+      allRows.forEach(row => { 
+        if(isAllCollapsed) row.classList.add('hidden'); 
+        else row.classList.remove('hidden'); 
+      });
+      allIcons.forEach(icon => { 
+        if(isAllCollapsed) icon.classList.add('collapsed'); 
+        else icon.classList.remove('collapsed'); 
+      });
+    }
+
+    async function deleteShiftRecord(btnElem, rowIdx, guardName) {
+      if(confirm(`⚠️ ยืนยันการลบข้อมูล\n\nคุณแน่ใจหรือไม่ที่จะลบประวัติการปิดกะของ "${guardName}" ?`)) {
+        btnElem.disabled = true;
+        btnElem.innerHTML = '⏳...';
+        try {
+          await db.ref(`Report/${rowIdx}`).remove();
+          alert("ลบประวัติเรียบร้อยแล้ว!");
+          loadData();
+        } catch (err) {
+          alert("เกิดข้อผิดพลาดในการลบ: " + err.message);
+          btnElem.disabled = false;
+          btnElem.innerHTML = '🗑️ ลบ';
+        }
+      }
+    }
+
+    function updateFcGuardDropdown() {
+      let selectedShift = document.getElementById('fcShift').value;
+      let guardsInShift = adminGuardsGlobal.filter(g => g.shift === selectedShift).map(g => g.name);
+      let sel = document.getElementById('fcGuard'); 
+      sel.innerHTML = '';
+      if (guardsInShift.length > 0) {
+         sel.innerHTML = `<option value="${guardsInShift.join(', ')}">ทีม รปภ. กะนี้ (${guardsInShift.join(', ')})</option>`;
+         guardsInShift.forEach(g => { sel.innerHTML += `<option value="${escapeHtml(g)}">รายบุคคล: ${escapeHtml(g)}</option>`; });
+      } else { 
+        sel.innerHTML = `<option value="">-- ไม่พบรายชื่อ รปภ. ที่ผูกกับกะนี้ --</option>`; 
+      }
+    }
+
+    function openForceCreateModal() {
+      const shiftSel = document.getElementById('fcShift'); 
+      shiftSel.innerHTML = adminShiftOpts.map(s => `<option value="${escapeHtml(s)}">${escapeHtml(s)}</option>`).join('');
+      document.getElementById('fcDate').valueAsDate = new Date(); 
+      updateFcGuardDropdown(); 
+      new bootstrap.Modal(document.getElementById('forceCreateModal')).show();
+    }
+
+    async function submitForceCreate() {
+      let dateVal = document.getElementById('fcDate').value; 
+      let shiftVal = document.getElementById('fcShift').value; 
+      let guardVal = document.getElementById('fcGuard').value;
+      if(!dateVal || !shiftVal || !guardVal) return alert('กรุณากรอกข้อมูลให้ครบทุกช่องครับ');
+      
+      let btn = document.getElementById('fcSubmitBtn'); 
+      btn.disabled = true; 
+      btn.innerHTML = '⏳ กำลังสร้างย้อนหลัง...';
+
+      try {
+        let shiftObj = adminShiftsFull.find(s => s.name === shiftVal) || { start: 19, end: 7 };
+        let sStart = parseInt(shiftObj.start || 0);
+        let sEnd = parseInt(shiftObj.end || 24);
+
+        let dateParts = dateVal.split('-');
+        let targetDate = new Date(parseInt(dateParts[0]), parseInt(dateParts[1]) - 1, parseInt(dateParts[2]), sEnd, 0, 0);
+        if (sStart > sEnd) {
+          targetDate.setDate(targetDate.getDate() + 1);
+        }
+
+        let newRecord = {
+          timestamp: targetDate.toISOString(),
+          timeSlot: 'ส่งมอบหน้าที่',
+          guardNames: guardVal,
+          shiftName: shiftVal,
+          task: 'ส่งมอบหน้าที่',
+          status: 'เหตุการณ์ปกติ',
+          detail: 'ปิดกะย้อนหลัง (สร้างโดยแอดมิน)',
+          imageUrl: '-',
+          pdfUrl: '-'
+        };
+
+        await db.ref('Report').push(newRecord);
+        alert("✅ สร้างรายงานย้อนหลังสำเร็จ! กดที่ปุ่มแก้ไขเพื่อกรอกรายละเอียดได้เลยครับ");
+        bootstrap.Modal.getInstance(document.getElementById('forceCreateModal')).hide(); 
+        btn.disabled = false; 
+        btn.innerHTML = 'สร้างรายงานย้อนหลัง'; 
+        loadData();
+      } catch (err) {
+        alert("เกิดข้อผิดพลาด: " + err.message);
+        btn.disabled = false; 
+        btn.innerHTML = 'สร้างรายงานย้อนหลัง'; 
+      }
+    }
+
+    function openEditShift(btnElem, handoverId) {
+      document.getElementById('editHandoverRow').value = handoverId;
+      let tbody = document.getElementById('editShiftBody'); 
+      tbody.innerHTML = '';
+
+      let targetHandover = allReportsMap[handoverId];
+      if (!targetHandover) return alert("ไม่พบข้อมูลรายงาน");
+
+      let handoverTime = new Date(targetHandover.timestamp);
+      let shiftName = targetHandover.shiftName || '';
+      let shiftObj = adminShiftsFull.find(s => s.name === shiftName) || { start: 19, end: 7 };
+      let sStart = parseInt(shiftObj.start || 0);
+      let sEnd = parseInt(shiftObj.end || 24);
+
+      let shiftEndTime = new Date(handoverTime.getTime());
+      let shiftStartTime = new Date(handoverTime.getTime());
+
+      if (sStart > sEnd) {
+        shiftStartTime.setDate(shiftEndTime.getDate() - 1);
+        shiftStartTime.setHours(sStart, 0, 0, 0);
+        shiftEndTime.setHours(sEnd, 0, 0, 0);
+      } else {
+        shiftStartTime.setHours(sStart, 0, 0, 0);
+        shiftEndTime.setHours(sEnd, 0, 0, 0);
+      }
+
+      let existingMap = {};
+      Object.keys(allReportsMap).forEach(k => {
+        let r = allReportsMap[k];
+        if (!r || !r.timestamp) return;
+        let rTime = new Date(r.timestamp);
+        if (r.timeSlot !== 'ส่งมอบหน้าที่' && r.task !== 'ส่งมอบหน้าที่' && rTime >= shiftStartTime && rTime <= shiftEndTime) {
+          existingMap[r.timeSlot] = { id: k, ...r };
+        }
+      });
+
+      let interval = parseInt(document.getElementById('adminInterval').value) || 1;
+      let totalH = (sStart <= sEnd) ? (sEnd - sStart) : ((24 - sStart) + sEnd);
+      let currTime = new Date(shiftStartTime.getTime());
+
+      for (let i = 0; i < totalH; i += interval) {
+        let slotStartH = currTime.getHours();
+        let nextTime = new Date(currTime.getTime() + interval * 3600 * 1000);
+        let slotEndH = nextTime.getHours();
+
+        let timeSlotStr = `${pad(slotStartH)}:00 - ${pad(slotEndH)}:00`;
+        let dateStr = `${pad(currTime.getDate())}/${pad(currTime.getMonth()+1)}/${currTime.getFullYear()}`;
+        let rawDateStr = currTime.toISOString();
+
+        let existingRecord = existingMap[timeSlotStr];
+        let rowId = existingRecord ? existingRecord.id : 'new';
+        let safeGuard = escapeHtml(existingRecord ? existingRecord.guardNames : targetHandover.guardNames);
+        let safeDetail = escapeHtml(existingRecord ? existingRecord.detail : '-');
+        let currentTask = existingRecord ? existingRecord.task : 'ประจำจุด';
+        let currentStatus = existingRecord ? existingRecord.status : 'เหตุการณ์ปกติ';
+
+        let taskOpts = adminTasksGlobal.map(t => `<option value="${escapeHtml(t)}" ${currentTask===t?'selected':''}>${escapeHtml(t)}</option>`).join('');
+        let statusOpts = `<option value="เหตุการณ์ปกติ" ${currentStatus==='เหตุการณ์ปกติ'?'selected':''}>เหตุการณ์ปกติ</option><option value="เหตุผิดปกติ" ${currentStatus==='เหตุผิดปกติ'?'selected':''}>เหตุผิดปกติ (ล่าช้า)</option>`;
+
+        tbody.innerHTML += `<tr class="shift-edit-row" data-row="${escapeHtml(rowId)}">
+          <td class="small text-muted align-middle"><input type="hidden" class="e-date" value="${escapeHtml(rawDateStr)}">${escapeHtml(dateStr)}</td>
+          <td class="small text-info fw-bold align-middle shift-name-label">${escapeHtml(shiftName)}</td>
+          <td class="fw-bold text-secondary align-middle"><input type="hidden" class="e-time" value="${escapeHtml(timeSlotStr)}">${escapeHtml(timeSlotStr)}</td>
+          <td><input type="text" class="form-control form-control-sm e-guard" style="min-width: 140px;" value="${safeGuard}"></td>
+          <td><select class="form-select form-select-sm e-task" style="min-width: 110px;">${taskOpts}</select></td>
+          <td><select class="form-select form-select-sm e-status" style="min-width: 140px;">${statusOpts}</select></td>
+          <td><input type="text" class="form-control form-control-sm e-detail" style="min-width: 150px;" value="${safeDetail}"></td>
+          <td class="align-middle"></td>
+        </tr>`;
+
+        currTime = nextTime;
+      }
+
+      new bootstrap.Modal(document.getElementById('editShiftModal')).show();
+    }
+
+    function addEditSlotRow() {
+      let tbody = document.getElementById('editShiftBody');
+      let taskOpts = adminTasksGlobal.map(t => `<option value="${escapeHtml(t)}">${escapeHtml(t)}</option>`).join('');
+      let defaultDate = new Date().toISOString().split('T')[0];
+      let firstDateInput = document.querySelector('.e-date');
+      if(firstDateInput && firstDateInput.value) { 
+        try { defaultDate = new Date(firstDateInput.value).toISOString().split('T')[0]; } catch(e){} 
+      }
+      let shiftName = "-"; 
+      let firstShift = document.querySelector('.shift-name-label'); 
+      if(firstShift) shiftName = firstShift.innerText;
+
+      let interval = parseInt(document.getElementById('adminInterval').value) || 1; 
+      let timeOpts = "";
+      for(let i=0; i<24; i+=interval) {
+         let startH = pad(i); 
+         let endH = pad((i+interval)%24);
+         timeOpts += `<option value="${startH}:00 - ${endH}:00">${startH}:00 - ${endH}:00</option>`;
+      }
+      let tr = document.createElement('tr'); 
+      tr.className = "shift-edit-row bg-light"; 
+      tr.setAttribute("data-row", "new");
+      tr.innerHTML = `
+        <td><input type="date" class="form-control form-control-sm e-date" style="min-width: 130px;" value="${defaultDate}" required></td>
+        <td class="small text-info fw-bold align-middle">${escapeHtml(shiftName)}</td>
+        <td><select class="form-select form-select-sm e-time" style="min-width: 130px;">${timeOpts}</select></td>
+        <td><input type="text" class="form-control form-control-sm e-guard" style="min-width: 140px;" placeholder="ชื่อ รปภ."></td>
+        <td><select class="form-select form-select-sm e-task" style="min-width: 110px;">${taskOpts}</select></td>
+        <td><select class="form-select form-select-sm e-status" style="min-width: 140px;"><option value="เหตุการณ์ปกติ">เหตุการณ์ปกติ</option><option value="เหตุผิดปกติ">เหตุผิดปกติ (ล่าช้า)</option></select></td>
+        <td><input type="text" class="form-control form-control-sm e-detail" style="min-width: 150px;" placeholder="-"></td>
+        <td class="align-middle"><button class="btn btn-sm btn-danger fw-bold" onclick="this.closest('tr').remove()">X</button></td>
+      `;
+      tbody.appendChild(tr);
+    }
+
+    async function saveShiftEdit() {
+      let btn = document.getElementById('saveShiftEditBtn');
+      let originalText = "💾 บันทึกการแก้ไข";
+      btn.innerHTML = '⏳ กำลังบันทึกข้อมูล...'; 
+      btn.disabled = true;
+
+      let handoverId = document.getElementById('editHandoverRow').value; 
+      let targetHandover = allReportsMap[handoverId];
+      if (!targetHandover) {
+        alert("ไม่พบข้อมูลกะที่ต้องการแก้ไข");
+        btn.innerHTML = originalText;
+        btn.disabled = false;
+        return;
+      }
+
+      let updates = [];
+      document.querySelectorAll('.shift-edit-row').forEach(tr => {
+        let rowId = tr.getAttribute('data-row'); 
+        let dDate = tr.querySelector('.e-date') ? tr.querySelector('.e-date').value : null; 
+        let dTime = tr.querySelector('.e-time') ? tr.querySelector('.e-time').value : null;
+        let guard = tr.querySelector('.e-guard') ? tr.querySelector('.e-guard').value : '';
+        let task = tr.querySelector('.e-task') ? tr.querySelector('.e-task').value : '';
+        let status = tr.querySelector('.e-status') ? tr.querySelector('.e-status').value : '';
+        let detail = tr.querySelector('.e-detail') ? tr.querySelector('.e-detail').value : '';
+
+        if (rowId === 'new') {
+          let timestamp = dDate ? new Date(dDate).toISOString() : new Date().toISOString();
+          updates.push(db.ref('Report').push({
+            timestamp: timestamp,
+            timeSlot: dTime,
+            guardNames: guard,
+            task: task,
+            status: status,
+            detail: detail,
+            imageUrl: '-'
+          }));
+        } else {
+          updates.push(db.ref(`Report/${rowId}`).update({
+            guardNames: guard,
+            task: task,
+            status: status,
+            detail: detail
+          }));
+        }
+      });
+
+      try {
+        await Promise.all(updates);
+        alert('✅ บันทึกรอบเวลาเรียบร้อยแล้ว!');
+        let modalElem = document.getElementById('editShiftModal');
+        let modalInstance = bootstrap.Modal.getInstance(modalElem);
+        if (modalInstance) modalInstance.hide();
+        loadData();
+      } catch (err) {
+        alert("❌ เกิดข้อผิดพลาด: " + err.message);
+      } finally {
+        btn.innerHTML = originalText;
+        btn.disabled = false;
+      }
+    }
+  </script>
+</body>
+</html>

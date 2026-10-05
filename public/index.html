@@ -1,0 +1,1039 @@
+<!DOCTYPE html>
+<html lang="th" class="antialiased dark">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+  <meta name="theme-color" content="#0f172a">
+  <title>Security Command | Thai Two Way (Firebase)</title>
+  
+  <!-- Font -->
+  <link href="https://fonts.googleapis.com/css2?family=Prompt:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+  
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  
+  <!-- Firebase App & Services (Compat v10 for Vanilla JS) -->
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-database-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-storage-compat.js"></script>
+  
+  <!-- html2pdf for Client-Side PDF Generation -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+
+  <!-- Firebase Config -->
+  <script src="firebase-config.js"></script>
+
+  <script>
+    if (localStorage.theme === 'light') {
+      document.documentElement.classList.remove('dark');
+    } else {
+      document.documentElement.classList.add('dark');
+    }
+
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          fontFamily: { prompt: ['Prompt', 'sans-serif'] },
+          colors: {
+            midnight: '#0f172a',
+            panel: '#1e293b',
+            cyan: { 400: '#22d3ee', 500: '#06b6d4', 600: '#0891b2' },
+            emerald: { 400: '#34d399', 500: '#10b981', 600: '#059669' },
+            rose: { 400: '#fb7185', 500: '#f43f5e', 600: '#e11d48', 700: '#be123c' },
+          },
+          animation: {
+            'pulse-fast': 'pulse 1.5s cubic-bezier(0.4, 0, 0.6, 1) infinite',
+            'slide-up': 'slideUp 0.4s ease-out forwards',
+            'scan': 'scan 2s linear infinite',
+          },
+          keyframes: {
+            slideUp: { '0%': { opacity: '0', transform: 'translateY(20px)' }, '100%': { opacity: '1', transform: 'translateY(0)' } },
+            scan: { '0%': { top: '0%' }, '50%': { top: '100%' }, '100%': { top: '0%' } },
+          }
+        }
+      }
+    }
+  </script>
+  <style>
+    body { font-family: 'Prompt', sans-serif; background-color: #f1f5f9; color: #0f172a; overflow-x: hidden; -webkit-tap-highlight-color: transparent; transition: background-color 0.3s ease; }
+    .dark body { background-color: #020617; color: #f8fafc; }
+    .no-scrollbar::-webkit-scrollbar { display: none; }
+    .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+    .dark .neon-text-cyan { text-shadow: 0 0 15px rgba(34, 211, 238, 0.6); }
+    
+    input:-webkit-autofill, textarea:-webkit-autofill {
+      -webkit-box-shadow: 0 0 0px 1000px transparent inset; transition: background-color 5000s ease-in-out 0s;
+    }
+    .dark input:-webkit-autofill, .dark textarea:-webkit-autofill { -webkit-text-fill-color: white; }
+
+    .hud-scanner { position: relative; overflow: hidden; border-radius: 1.5rem; background: #000; aspect-ratio: 3/4; max-width: 400px; margin: 0 auto; box-shadow: 0 10px 30px rgba(0,0,0,0.5); }
+    .hud-scanner video, .hud-scanner img { width: 100%; height: 100%; object-fit: cover; }
+    .hud-overlay { position: absolute; inset: 0; pointer-events: none; }
+    .dark .hud-overlay { background: linear-gradient(rgba(34, 211, 238, 0.1) 0%, transparent 10%, transparent 90%, rgba(34, 211, 238, 0.1) 100%); }
+    .hud-corners { position: absolute; inset: 20px; border: 3px solid rgba(255,255,255,0.3); border-radius: 12px; }
+    .hud-corners::before, .hud-corners::after, .hud-corners-bottom::before, .hud-corners-bottom::after { content: ''; position: absolute; width: 40px; height: 40px; border-color: #22d3ee; border-style: solid; }
+    .hud-corners::before { top: -3px; left: -3px; border-width: 5px 0 0 5px; border-top-left-radius: 12px; }
+    .hud-corners::after { top: -3px; right: -3px; border-width: 5px 5px 0 0; border-top-right-radius: 12px; }
+    .hud-corners-bottom::before { bottom: -3px; left: -3px; border-width: 0 0 5px 5px; border-bottom-left-radius: 12px; }
+    .hud-corners-bottom::after { bottom: -3px; right: -3px; border-width: 0 5px 5px 0; border-bottom-right-radius: 12px; }
+    .hud-scanline { position: absolute; left: 0; right: 0; height: 3px; background: #22d3ee; box-shadow: 0 0 20px #22d3ee; animation: scan 2.5s linear infinite; }
+    
+    select option { background-color: #ffffff; color: #000; font-size: 1.25rem; }
+    .dark select option { background-color: #0f172a; color: white; }
+  </style>
+</head>
+<body class="no-scrollbar">
+
+  <!-- ระบบบังคับปิดกะ -->
+  <div id="forceHandoverScreen" class="fixed inset-0 z-[100] bg-black/95 backdrop-blur-md hidden flex-col justify-center items-center px-4 overflow-y-auto pt-10 pb-10">
+    <div class="w-full max-w-2xl bg-white dark:bg-slate-900 border-4 border-rose-600 rounded-[2rem] overflow-hidden shadow-[0_0_60px_rgba(225,29,72,0.4)] relative animate-slide-up">
+      <div class="bg-rose-600 py-8 text-center relative overflow-hidden">
+        <div class="absolute inset-0 opacity-20" style="background-image: repeating-linear-gradient(45deg, transparent, transparent 15px, #000 15px, #000 30px);"></div>
+        <h2 class="text-4xl sm:text-5xl font-black text-white relative z-10 tracking-widest">SYSTEM ALERT</h2>
+        <p class="text-white font-bold mt-2 text-2xl relative z-10">ระบบบังคับปิดเวรตกค้าง</p>
+      </div>
+      
+      <div class="p-8">
+        <div class="bg-rose-50 dark:bg-rose-950/50 border-2 border-rose-300 dark:border-rose-500/50 rounded-2xl p-6 text-center mb-8">
+          <p class="text-slate-600 dark:text-slate-300 text-xl mb-2">เวรที่ยังไม่ได้เคลียร์ระบบ</p>
+          <p class="text-rose-600 dark:text-rose-400 font-black text-3xl sm:text-4xl" id="fhShiftName"></p>
+        </div>
+
+        <div class="space-y-8">
+          <div class="relative mt-4">
+            <label class="absolute -top-4 left-6 bg-white dark:bg-slate-900 px-3 text-lg font-bold text-rose-600 dark:text-rose-400 z-10">ชื่อผู้ปิดเวรตกค้าง</label>
+            <input type="text" id="fhName" class="w-full bg-slate-50 dark:bg-transparent border-4 border-slate-300 dark:border-slate-700 focus:border-rose-500 rounded-2xl px-6 py-6 text-slate-900 dark:text-white text-2xl font-bold outline-none transition-colors relative z-0" placeholder="พิมพ์ชื่อของคุณที่นี่...">
+          </div>
+
+          <div class="hud-scanner mx-auto mt-4 w-full max-w-[350px] border-4 border-rose-500 shadow-[0_0_30px_rgba(225,29,72,0.3)]">
+            <video id="fhVideo" autoplay playsinline class="hidden"></video>
+            <img id="fhPreview" class="hidden">
+            <div class="hud-overlay" style="background: linear-gradient(rgba(244,63,94,0.1) 0%, transparent 10%, transparent 90%, rgba(244,63,94,0.1) 100%);"><div class="hud-scanline" id="fhScanLine" style="background: #f43f5e; box-shadow: 0 0 20px #f43f5e;"></div></div>
+            <canvas id="fhCanvas" class="hidden"></canvas>
+          </div>
+          
+          <div class="flex gap-4">
+            <button id="fhRetakeBtn" onclick="fhRetake()" class="flex-1 bg-slate-200 dark:bg-slate-800 text-slate-800 dark:text-white font-bold py-5 text-2xl rounded-2xl hidden active:scale-95 transition-transform border-2 border-slate-300 dark:border-slate-600">
+              🔄 ถ่ายใหม่
+            </button>
+            <button id="fhCaptureBtn" onclick="fhCapture()" class="flex-1 bg-rose-600 hover:bg-rose-500 text-white font-bold py-5 text-2xl rounded-2xl shadow-[0_0_20px_rgba(225,29,72,0.5)] active:scale-95 transition-transform">
+              📸 สแกนใบหน้า
+            </button>
+          </div>
+
+          <button onclick="fhSubmit()" id="fhSubmitBtn" class="w-full bg-rose-600 hover:bg-rose-500 text-white font-black text-3xl py-6 rounded-2xl active:scale-95 transition-all mt-4 shadow-xl flex items-center justify-center gap-3">
+            <span>เคลียร์เวรตกค้างทันที</span>
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- App Container -->
+  <div class="max-w-2xl mx-auto w-full min-h-screen relative flex flex-col bg-slate-100 dark:bg-midnight shadow-2xl dark:shadow-cyan-900/10 border-x border-slate-200 dark:border-white/5 transition-colors duration-300">
+    
+    <!-- Loading Screen -->
+    <div id="loading" class="absolute inset-0 z-50 flex flex-col items-center justify-center bg-slate-100 dark:bg-midnight transition-colors duration-300">
+      <div class="relative w-32 h-32 mb-8">
+        <div class="absolute inset-0 rounded-full border-t-8 border-cyan-500 dark:border-cyan-400 animate-spin"></div>
+        <div class="absolute inset-3 rounded-full border-b-8 border-emerald-500 dark:border-emerald-400 animate-spin" style="animation-direction: reverse; animation-duration: 1.5s;"></div>
+        <div class="absolute inset-0 flex items-center justify-center text-5xl">🛡️</div>
+      </div>
+      <h2 class="text-3xl font-black text-slate-900 dark:text-white tracking-widest">CONNECTING</h2>
+      <p class="text-cyan-600 dark:text-cyan-400 font-bold mt-4 text-xl animate-pulse">กำลังเชื่อมต่อ Firebase Realtime...</p>
+    </div>
+
+    <!-- Main Content -->
+    <div id="mainContent" class="hidden flex-col flex-1 pb-32">
+      
+      <!-- Sticky Header -->
+      <header class="sticky top-0 z-40 bg-white/95 dark:bg-midnight/95 backdrop-blur-2xl border-b-2 border-slate-200 dark:border-slate-800 transition-colors duration-300">
+        <div class="px-4 sm:px-5 py-3 sm:py-4 flex items-center justify-between gap-2">
+          
+          <!-- Logo & Title -->
+          <div class="flex items-center gap-2 sm:gap-3 shrink-0">
+            <div class="w-10 h-10 sm:w-14 sm:h-14 rounded-2xl bg-gradient-to-br from-cyan-500 to-blue-700 flex items-center justify-center shadow-lg shadow-cyan-500/30 shrink-0">
+              <span class="text-xl sm:text-3xl">🏢</span>
+            </div>
+            <div>
+              <h1 class="text-base sm:text-2xl font-black text-slate-900 dark:text-white leading-none tracking-wide">Security Command</h1>
+              <p class="text-xs sm:text-base text-cyan-600 dark:text-cyan-400 font-bold mt-1 leading-none">Thai Two Way</p>
+            </div>
+          </div>
+
+          <!-- Controls Right Side -->
+          <div class="flex items-center justify-end flex-1 min-w-0 gap-1.5 sm:gap-2">
+            <div class="flex-1 overflow-x-auto no-scrollbar flex justify-end">
+              <div id="headerLinksContainer" class="flex items-center gap-2 pr-1"></div>
+            </div>
+
+            <!-- Theme Toggle -->
+            <button onclick="toggleTheme()" class="w-9 h-9 sm:w-12 sm:h-12 shrink-0 rounded-full bg-slate-100 dark:bg-slate-800 flex items-center justify-center text-base sm:text-xl shadow-sm border border-slate-300 dark:border-slate-600 active:scale-95 transition-all text-slate-700 dark:text-slate-300">
+              <span id="themeToggleIcon">🌙</span>
+            </button>
+
+            <!-- Action Menu -->
+            <div class="relative shrink-0">
+              <button id="menuToggleBtn" onclick="toggleMenu(event)" class="w-9 h-9 sm:w-12 sm:h-12 rounded-full bg-slate-100 dark:bg-slate-800 flex items-center justify-center active:scale-95 transition-all border border-slate-300 dark:border-slate-600 shadow-sm text-slate-700 dark:text-slate-300 focus:outline-none focus:ring-2 focus:ring-cyan-500">
+                <svg class="w-5 h-5 sm:w-7 sm:h-7 pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M4 6h16M4 12h16m-7 6h7"></path></svg>
+              </button>
+              
+              <div id="menuDropdown" class="hidden absolute right-0 top-[calc(100%+0.5rem)] min-w-[220px] max-w-[85vw] bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl shadow-2xl overflow-hidden z-[100] transform origin-top-right transition-all">
+                <a href="admin.html" class="flex items-center gap-3 px-5 py-4 text-base sm:text-lg text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 font-bold transition-colors w-full text-left">
+                  <span class="text-xl">⚙️</span> แผงควบคุมระบบ (Admin)
+                </a>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Shift Info Bar -->
+        <div class="px-5 pb-5">
+          <div class="bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-3xl p-5 flex items-center justify-between shadow-inner">
+            <div>
+              <div class="flex items-center gap-2 mb-2">
+                <p class="text-sm text-slate-500 dark:text-slate-400 font-bold tracking-widest">เวรปฏิบัติงานปัจจุบัน</p>
+                <span class="text-xs font-medium text-slate-400 dark:text-slate-500" id="currentDate">--/--/----</span>
+              </div>
+              <h2 id="shiftInfo" class="text-3xl sm:text-4xl font-black text-slate-900 dark:text-white neon-text-cyan">--</h2>
+            </div>
+            <div class="text-right">
+              <div class="inline-flex items-center gap-2 bg-emerald-100 dark:bg-emerald-500/20 border-2 border-emerald-300 dark:border-emerald-500/40 px-3 py-1.5 rounded-full">
+                <div class="w-3 h-3 rounded-full bg-emerald-500 dark:bg-emerald-400 animate-pulse-fast shadow-[0_0_10px_#34d399]"></div>
+                <span class="text-xs font-black text-emerald-700 dark:text-emerald-400 tracking-wider">FIREBASE LIVE</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </header>
+
+      <!-- Scrollable Content -->
+      <main class="flex-1 px-5 py-8 space-y-12">
+        
+        <!-- 1. Guard Selection -->
+        <section>
+          <div class="flex items-center gap-4 mb-6">
+            <div class="w-12 h-12 rounded-xl bg-cyan-100 dark:bg-cyan-900/50 border border-cyan-300 dark:border-cyan-500/30 flex items-center justify-center text-cyan-700 dark:text-cyan-400 font-black text-2xl shadow-sm">1</div>
+            <div>
+              <h3 class="text-2xl font-black text-slate-900 dark:text-white">กำลังพลเข้าเวร</h3>
+              <p class="text-lg text-slate-500 dark:text-slate-400 mt-1">แตะเพื่อเลือกเจ้าหน้าที่ (เลือกได้หลายคน)</p>
+            </div>
+          </div>
+          
+          <div id="guardList" class="grid grid-cols-2 gap-4"></div>
+        </section>
+
+        <!-- 2. Mission Cards -->
+        <section>
+          <div class="flex items-center gap-4 mb-6">
+            <div class="w-12 h-12 rounded-xl bg-cyan-100 dark:bg-cyan-900/50 border border-cyan-300 dark:border-cyan-500/30 flex items-center justify-center text-cyan-700 dark:text-cyan-400 font-black text-2xl shadow-sm">2</div>
+            <div>
+              <h3 class="text-2xl font-black text-slate-900 dark:text-white">บันทึกการตรวจตรา</h3>
+              <p class="text-lg text-slate-500 dark:text-slate-400 mt-1">รายงานภารกิจตามรอบเวลา</p>
+            </div>
+          </div>
+          
+          <div id="timelineSection" class="space-y-8"></div>
+        </section>
+
+        <!-- 3. Handover Terminal -->
+        <section class="mt-12 relative">
+          <div class="flex items-center gap-4 mb-6">
+            <div class="w-12 h-12 rounded-xl bg-emerald-100 dark:bg-emerald-900/50 border border-emerald-300 dark:border-emerald-500/30 flex items-center justify-center text-emerald-700 dark:text-emerald-400 font-black text-2xl shadow-sm">3</div>
+            <div>
+              <h3 class="text-2xl font-black text-slate-900 dark:text-white">จบภารกิจ / ส่งเวร</h3>
+              <p class="text-lg text-slate-500 dark:text-slate-400 mt-1">ทำรายการเพื่อปิดเวรการทำงาน</p>
+            </div>
+          </div>
+
+          <div class="bg-white dark:bg-slate-900 border-2 border-slate-200 dark:border-slate-700 rounded-[2.5rem] overflow-hidden shadow-xl dark:shadow-2xl relative transition-colors duration-300">
+            <div class="h-3 w-full bg-gradient-to-r from-emerald-400 via-cyan-400 to-blue-500"></div>
+            
+            <div class="p-6 sm:p-8">
+              <div id="lockNotice" class="bg-amber-50 dark:bg-slate-800 rounded-2xl p-5 mb-8 border-2 border-amber-200 dark:border-slate-700 flex items-center gap-5">
+                <div class="w-14 h-14 rounded-full bg-amber-100 dark:bg-amber-500/20 flex items-center justify-center flex-shrink-0 border border-amber-300 dark:border-amber-500/30">
+                  <span class="text-amber-600 dark:text-amber-400 text-3xl">⏱️</span>
+                </div>
+                <div>
+                  <p class="text-base text-amber-700 dark:text-slate-400 font-bold mb-1">เวลาที่ระบบอนุญาตให้ปิดเวร</p>
+                  <p class="text-xl text-slate-900 dark:text-white font-medium" id="lockNoticeText">กำลังโหลด...</p>
+                </div>
+              </div>
+
+              <div class="space-y-8">
+                <div class="relative mt-2">
+                  <label class="absolute -top-4 left-6 bg-white dark:bg-slate-900 px-3 text-lg font-bold text-cyan-600 dark:text-cyan-400 z-10 transition-colors duration-300">ชื่อผู้ส่งมอบเวร (คุณ)</label>
+                  <input type="text" id="handoverName" class="w-full bg-slate-50 dark:bg-slate-950 border-4 border-slate-300 dark:border-slate-700 rounded-2xl px-6 py-6 text-slate-900 dark:text-white text-2xl font-bold focus:border-cyan-500 dark:focus:border-cyan-400 focus:outline-none transition-colors relative z-0" placeholder="พิมพ์ชื่อ-นามสกุล...">
+                </div>
+
+                <div id="camTriggerSection">
+                  <button id="openCamBtn" onclick="openHandoverCamera()" class="w-full h-40 border-4 border-dashed border-slate-300 dark:border-slate-600 hover:border-cyan-500 dark:hover:border-cyan-400 hover:bg-cyan-50 dark:hover:bg-cyan-400/10 rounded-[2rem] flex flex-col items-center justify-center gap-3 transition-all group bg-slate-50 dark:bg-transparent">
+                    <div class="w-20 h-20 rounded-full bg-white dark:bg-slate-800 group-hover:bg-cyan-100 dark:group-hover:bg-cyan-400/20 flex items-center justify-center text-4xl transition-colors border-2 border-slate-200 dark:border-slate-700 group-hover:border-cyan-400 shadow-sm">📷</div>
+                    <span class="text-slate-500 dark:text-slate-400 group-hover:text-cyan-600 dark:group-hover:text-cyan-300 font-bold text-xl">แตะเพื่อเปิดกล้องถ่ายรูป</span>
+                  </button>
+                </div>
+
+                <div id="handoverCamArea" class="hidden flex-col items-center space-y-6 bg-slate-100 dark:bg-black/40 p-6 rounded-[2rem] border-2 border-slate-200 dark:border-slate-800 shadow-inner">
+                  <div class="hud-scanner w-full max-w-[350px] border-4 border-cyan-400 dark:border-cyan-500/50 shadow-lg">
+                    <video id="hVideo" autoplay playsinline></video>
+                    <img id="hPreview" class="hidden">
+                    <div class="hud-overlay"><div class="hud-scanline" id="hScanLine"></div></div>
+                    <div class="hud-corners"><div class="hud-corners-bottom"></div></div>
+                    <canvas id="hCanvas" class="hidden"></canvas>
+                  </div>
+                  
+                  <div class="flex gap-4 w-full max-w-[350px]">
+                    <button id="hRetakeBtn" onclick="retakeHandover()" class="flex-1 bg-white dark:bg-slate-800 text-slate-800 dark:text-white font-bold py-4 text-xl rounded-2xl hidden active:scale-95 transition-transform border-2 border-slate-300 dark:border-slate-600 shadow-sm">
+                      🔄 ถ่ายใหม่
+                    </button>
+                    <button id="hCaptureBtn" onclick="captureHandover()" class="flex-1 bg-cyan-600 hover:bg-cyan-500 text-white font-bold py-4 text-xl rounded-2xl shadow-[0_5px_15px_rgba(8,145,178,0.4)] active:scale-95 transition-transform">
+                      📸 บันทึกภาพ
+                    </button>
+                  </div>
+                </div>
+
+                <button onclick="submitHandover()" id="finalSubmitBtn" class="w-full bg-gradient-to-r from-emerald-500 to-emerald-600 text-white font-black text-3xl py-6 rounded-2xl shadow-[0_15px_30px_rgba(16,185,129,0.3)] active:scale-95 transition-transform flex items-center justify-center gap-3 mt-4 border-2 border-emerald-400">
+                  <span>✅</span> ยืนยันปิดเวร
+                </button>
+              </div>
+            </div>
+          </div>
+        </section>
+      </main>
+    </div>
+  </div>
+
+  <!-- Hidden Container for Client-Side PDF Generation -->
+  <div id="pdfRenderContainer" style="display: none; position: absolute; left: -9999px; top: -9999px; width: 800px; background: #fff; padding: 20px; font-family: 'Prompt', sans-serif;"></div>
+
+  <script>
+    let appData = {};
+    let currentHandoverImg = null; 
+    let fhImg = null;
+    let hStream = null; 
+    let fhStream = null;
+    let rawReportsList = [];
+
+    function toggleTheme() {
+      document.documentElement.classList.toggle('dark');
+      const isDark = document.documentElement.classList.contains('dark');
+      localStorage.setItem('theme', isDark ? 'dark' : 'light');
+      updateThemeIcon();
+    }
+    
+    function updateThemeIcon() {
+      const isDark = document.documentElement.classList.contains('dark');
+      document.getElementById('themeToggleIcon').innerText = isDark ? '☀️' : '🌙';
+    }
+
+    function toggleMenu(e) {
+      e.stopPropagation(); 
+      document.getElementById('menuDropdown').classList.toggle('hidden');
+    }
+
+    document.addEventListener('click', function(event) {
+      const menu = document.getElementById('menuDropdown');
+      const btn = document.getElementById('menuToggleBtn');
+      if (!menu.classList.contains('hidden') && event.target !== btn && !menu.contains(event.target)) {
+        menu.classList.add('hidden');
+      }
+    });
+
+    function pad(n) { return n < 10 ? '0'+n : n; }
+    function vibrate(pattern) { if (navigator.vibrate) navigator.vibrate(pattern); }
+
+    function toSafeArray(data) {
+      if (!data) return [];
+      if (Array.isArray(data)) return data;
+      if (typeof data === 'object') return Object.values(data);
+      return [];
+    }
+
+    function getShiftByTime(timeObj, shifts) {
+      let h = timeObj.getHours();
+      for(let s of shifts) {
+        if (s.start < s.end) { 
+          if (h >= s.start && h < s.end) return s; 
+        } else { 
+          if (h >= s.start || h < s.end) return s; 
+        }
+      }
+      return { name: "ไม่พบกะเวลา", start: 0, end: 24 };
+    }
+
+    // โหลดข้อมูลโดยตรงจาก Firebase Realtime Database
+    async function loadDataFromFirebase() {
+      try {
+        const [settingsSnap, guardsSnap, reportSnap] = await Promise.all([
+          db.ref('Settings').once('value'),
+          db.ref('Guards').once('value'),
+          db.ref('Report').once('value')
+        ]);
+
+        const settings = settingsSnap.val() || {};
+        const interval = parseInt(settings.interval || 1);
+        const tasks = toSafeArray(settings.tasks);
+        
+        let shifts = [];
+        if (settings.shifts) {
+          toSafeArray(settings.shifts).forEach(s => {
+            shifts.push({
+              name: (s.name || '').toString().trim(),
+              start: parseInt(s.start || 0),
+              end: parseInt(s.end || 24),
+              lockStart: (s.lockStart || '').toString().trim().substring(0, 5),
+              lockEnd: (s.lockEnd || '').toString().trim().substring(0, 5)
+            });
+          });
+        }
+
+        let links = [];
+        if (settings.links) {
+          toSafeArray(settings.links).forEach(l => {
+            links.push({ name: l.name, url: l.url, target: l.target || '_blank' });
+          });
+        }
+
+        const now = new Date();
+        const currentH = now.getHours();
+        const currentShift = getShiftByTime(now, shifts);
+
+        const guardsObj = guardsSnap.val() || {};
+        let activeGuards = [];
+        toSafeArray(guardsObj).forEach(g => {
+          if (g.shift === currentShift.name) activeGuards.push(g.name);
+        });
+
+        const reportObj = reportSnap.val() || {};
+        rawReportsList = Object.keys(reportObj)
+          .map(key => ({ id: key, ...reportObj[key] }))
+          .filter(r => r && r.timestamp);
+        
+        rawReportsList.sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
+
+        let submittedSlots = [];
+        let shiftStartTime = new Date(now.getTime());
+        shiftStartTime.setHours(currentShift.start, 0, 0, 0);
+        let shiftEndTime = new Date(now.getTime());
+        shiftEndTime.setHours(currentShift.end, 0, 0, 0);
+
+        if (currentShift.start > currentShift.end) {
+          if (currentH < currentShift.end) { 
+            shiftStartTime.setDate(shiftStartTime.getDate() - 1); 
+          } else { 
+            shiftEndTime.setDate(shiftEndTime.getDate() + 1); 
+          }
+        } else {
+          if (currentH < currentShift.start) { 
+            shiftStartTime.setDate(shiftStartTime.getDate() - 1); 
+            shiftEndTime.setDate(shiftEndTime.getDate() - 1); 
+          }
+        }
+
+        let windowStart = new Date(shiftStartTime.getTime() - (1 * 60 * 60 * 1000));
+        let windowEnd = new Date(shiftEndTime.getTime() + (1 * 60 * 60 * 1000));
+
+        let forceHandover = false; 
+        let missedShiftName = "";
+        if (rawReportsList.length > 0) {
+          let lastReport = rawReportsList[rawReportsList.length - 1];
+          if (lastReport.task !== 'ส่งมอบหน้าที่' && lastReport.timeSlot !== 'ส่งมอบหน้าที่') {
+            let lastShift = getShiftByTime(new Date(lastReport.timestamp), shifts);
+            if (lastShift.name !== currentShift.name) { 
+              forceHandover = true; 
+              missedShiftName = lastShift.name; 
+            }
+          }
+        }
+
+        rawReportsList.forEach(r => {
+          let rowTime = new Date(r.timestamp);
+          if (rowTime >= windowStart && rowTime <= windowEnd && r.task !== 'ส่งมอบหน้าที่' && r.timeSlot !== 'ส่งมอบหน้าที่') { 
+            submittedSlots.push(r.timeSlot); 
+          }
+        });
+
+        let lockStartStr = currentShift.lockStart || pad(currentShift.start) + ":00";
+        let lockEndStr = currentShift.lockEnd || pad(currentShift.end) + ":00";
+        
+        let lsParts = lockStartStr.split(":"); 
+        let leParts = lockEndStr.split(":");
+        let lockStartObj = new Date(shiftEndTime.getTime()); 
+        lockStartObj.setHours(parseInt(lsParts[0]), parseInt(lsParts[1]), 0, 0);
+        let lockEndObj = new Date(shiftEndTime.getTime()); 
+        lockEndObj.setHours(parseInt(leParts[0]), parseInt(leParts[1]), 0, 0);
+
+        if (lockStartObj.getTime() - shiftEndTime.getTime() > 12 * 3600 * 1000) lockStartObj.setDate(lockStartObj.getDate() - 1);
+        else if (shiftEndTime.getTime() - lockStartObj.getTime() > 12 * 3600 * 1000) lockStartObj.setDate(lockStartObj.getDate() + 1);
+
+        return {
+          shift: currentShift,
+          shifts: shifts,
+          interval: interval,
+          tasks: tasks,
+          guards: activeGuards,
+          submittedSlots: submittedSlots,
+          links: links,
+          currentTime: now.getTime(),
+          forceHandover: forceHandover,
+          missedShiftName: missedShiftName,
+          lockStartTs: lockStartObj.getTime(),
+          lockEndTs: lockEndObj.getTime(),
+          shiftStartTime: shiftStartTime,
+          shiftEndTime: shiftEndTime
+        };
+      } catch (err) {
+        console.error("Firebase loadData error:", err);
+        throw err;
+      }
+    }
+
+    window.onload = function() {
+      updateThemeIcon(); 
+      loadDataFromFirebase()
+        .then(data => {
+          if (data.forceHandover) {
+            triggerForceHandover(data);
+          } else {
+            document.getElementById('loading').classList.add('opacity-0', 'pointer-events-none');
+            setTimeout(() => document.getElementById('loading').classList.add('hidden'), 300);
+            
+            document.getElementById('mainContent').classList.remove('hidden');
+            document.getElementById('mainContent').classList.add('flex');
+            initApp(data);
+          }
+        })
+        .catch(e => {
+          document.getElementById('loading').innerHTML = `
+            <div class="text-center px-8">
+              <div class="text-6xl mb-6">📡</div>
+              <h4 class="text-3xl font-black text-rose-500 mb-4">เชื่อมต่อ Firebase ล้มเหลว</h4>
+              <p class="text-slate-600 dark:text-slate-400 mb-8 text-xl">${e.message || 'โปรดตรวจสอบการเชื่อมต่อและ Firebase Config'}</p>
+              <button onclick="location.reload()" class="w-full bg-white dark:bg-slate-800 border-2 border-slate-300 dark:border-slate-600 text-slate-800 dark:text-white font-bold py-5 text-2xl rounded-2xl active:scale-95 transition shadow-lg">🔄 โหลดระบบใหม่</button>
+            </div>`;
+        });
+    };
+
+    function triggerForceHandover(data) {
+      document.getElementById('loading').classList.add('hidden'); 
+      document.getElementById('fhShiftName').innerText = data.missedShiftName; 
+      appData = data; 
+      
+      const modal = document.getElementById('forceHandoverScreen');
+      modal.classList.remove('hidden');
+      modal.classList.add('flex');
+      
+      document.getElementById('fhVideo').classList.remove('hidden');
+      navigator.mediaDevices.getUserMedia({ video: { facingMode: "user" } })
+        .then(stream => { 
+          fhStream = stream; 
+          document.getElementById('fhVideo').srcObject = stream; 
+        })
+        .catch(e => console.log("Camera blocked", e));
+    }
+
+    function initApp(data) {
+      appData = data;
+      document.getElementById('shiftInfo').innerText = data.shift.name;
+      
+      let d = new Date();
+      let dateOptions = { year: 'numeric', month: 'short', day: 'numeric' };
+      document.getElementById('currentDate').innerHTML = d.toLocaleDateString('th-TH', dateOptions);
+      
+      if (data.links && data.links.length > 0) {
+        let linksHtml = '';
+        data.links.forEach(l => { 
+          linksHtml += `
+            <a href="${l.url}" target="${l.target}" class="whitespace-nowrap px-4 py-2 sm:py-2.5 rounded-full bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-600 hover:border-cyan-500 dark:hover:border-cyan-400 text-slate-700 dark:text-slate-300 font-bold text-xs sm:text-sm shadow-sm active:scale-95 transition-all flex items-center gap-1.5">
+              <span>🔗</span> ${l.name}
+            </a>`; 
+        });
+        document.getElementById('headerLinksContainer').innerHTML = linksHtml;
+      }
+
+      let guardHtml = data.guards.length === 0 ? '<div class="col-span-2 p-6 bg-rose-50 dark:bg-rose-500/10 border-2 border-rose-300 dark:border-rose-500/30 text-rose-600 dark:text-rose-400 rounded-2xl text-center text-xl font-bold">ไม่พบรายชื่อในระบบ</div>' : '';
+      data.guards.forEach((g, idx) => {
+        guardHtml += `
+          <label class="relative flex flex-col items-center justify-center p-6 bg-white dark:bg-slate-800 border-4 border-slate-200 dark:border-slate-700 rounded-3xl cursor-pointer transition-all duration-300 transform active:scale-95 text-slate-600 dark:text-slate-300 shadow-sm">
+            <input type="checkbox" value="${g}" class="hidden guard-cb peer" id="g${idx}">
+            <div class="absolute inset-0 rounded-3xl border-4 border-transparent peer-checked:border-cyan-500 dark:peer-checked:border-cyan-400 peer-checked:bg-cyan-50 dark:peer-checked:bg-cyan-900/40 transition-all"></div>
+            <span class="text-6xl mb-4 relative z-10 filter drop-shadow-md">👮‍♂️</span>
+            <span class="font-black relative z-10 peer-checked:text-cyan-700 dark:peer-checked:text-cyan-400 text-center leading-tight text-xl sm:text-2xl">${g}</span>
+            <div class="absolute top-3 right-3 opacity-0 peer-checked:opacity-100 text-cyan-500 dark:text-cyan-400 transition-opacity z-10 bg-white dark:bg-slate-900 rounded-full border-2 border-cyan-500 dark:border-cyan-400 p-1">
+              <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="4" d="M5 13l4 4L19 7"></path></svg>
+            </div>
+          </label>`;
+      });
+      document.getElementById('guardList').innerHTML = guardHtml;
+      
+      generateTimelineSlots();
+
+      let lStartText = appData.shift.lockStart || pad(appData.shift.start) + ":00"; 
+      let lEndText = appData.shift.lockEnd || pad(appData.shift.end) + ":00";
+      document.getElementById('lockNoticeText').innerHTML = `ส่งเวรได้เฉพาะช่วงเวลา <br><span class="text-amber-600 dark:text-amber-400 font-black text-2xl">${lStartText} - ${lEndText} น.</span>`;
+    }
+
+    function toggleStatus(cardId, isDanger) {
+      let card = document.getElementById(cardId);
+      let btnSafe = card.querySelector('.btn-safe');
+      let btnDanger = card.querySelector('.btn-danger');
+      let detailZone = document.getElementById(`detail_${cardId}`);
+      let statusVal = card.querySelector('.status-val');
+      let detailInp = card.querySelector('.detail-inp');
+
+      const inactiveClass = 'flex-1 py-5 rounded-2xl font-black text-2xl border-2 transition-all bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 border-slate-300 dark:border-slate-700';
+      const safeActiveClass = 'flex-1 py-5 rounded-2xl font-black text-2xl border-2 transition-all bg-emerald-500 text-white border-emerald-400 shadow-[0_0_20px_rgba(16,185,129,0.4)]';
+      const dangerActiveClass = 'flex-1 py-5 rounded-2xl font-black text-2xl border-2 transition-all bg-rose-600 text-white border-rose-500 shadow-[0_0_20px_rgba(225,29,72,0.6)]';
+
+      if (isDanger) {
+        vibrate([100, 150, 100]);
+        btnDanger.className = 'btn-danger ' + dangerActiveClass;
+        btnSafe.className = 'btn-safe ' + inactiveClass;
+        detailZone.classList.remove('hidden');
+        card.classList.add('border-rose-400', 'dark:border-rose-500', 'bg-rose-50', 'dark:bg-rose-950/40');
+        card.classList.remove('border-slate-200', 'dark:border-slate-700', 'bg-white', 'dark:bg-slate-800');
+        statusVal.value = 'เหตุผิดปกติ';
+        setTimeout(() => detailInp.focus(), 150);
+      } else {
+        vibrate([50]);
+        btnSafe.className = 'btn-safe ' + safeActiveClass;
+        btnDanger.className = 'btn-danger ' + inactiveClass;
+        detailZone.classList.add('hidden');
+        card.classList.remove('border-rose-400', 'dark:border-rose-500', 'bg-rose-50', 'dark:bg-rose-950/40');
+        card.classList.add('border-slate-200', 'dark:border-slate-700', 'bg-white', 'dark:bg-slate-800');
+        statusVal.value = 'เหตุการณ์ปกติ';
+        detailInp.value = ''; 
+      }
+    }
+
+    function generateTimelineSlots() {
+      let container = document.getElementById('timelineSection'); 
+      container.innerHTML = '';
+      let sStart = appData.shift.start, sEnd = appData.shift.end; 
+      let totalH = (sStart <= sEnd) ? (sEnd - sStart) : ((24 - sStart) + sEnd);
+      let now = new Date(); 
+      let cH = now.getHours(), cM = now.getMinutes(); 
+      let taskOpts = appData.tasks.map(t => `<option value="${t}">${t}</option>`).join('');
+
+      for(let i=0; i < totalH; i += appData.interval) {
+        let slotStartH = (sStart + i) % 24, slotEndH = (sStart + i + appData.interval) % 24;
+        let timeLabel = `${pad(slotStartH)}:00 - ${pad(slotEndH)}:00`;
+        let isSub = appData.submittedSlots.includes(timeLabel); 
+        let endM = (slotEndH < sStart) ? (slotEndH + 24)*60 : slotEndH*60; 
+        let nowM = (cH < sStart) ? (cH + 24)*60 + cM : cH*60 + cM;
+        
+        let startM = endM - (appData.interval * 60);
+        let isPastDue = (!isSub && nowM > endM);
+        let isFuture = (nowM < startM);
+        let isActive = (!isSub && !isPastDue && !isFuture);
+
+        let timelineItem = document.createElement('div');
+        timelineItem.className = 'relative pl-12 transition-all duration-500';
+        let cardId = `slot_${i}`;
+
+        let markerColor = isSub ? 'bg-emerald-500 border-emerald-200 dark:border-emerald-900' : (isActive ? 'bg-cyan-500 dark:bg-cyan-400 border-cyan-200 dark:border-cyan-900 shadow-[0_0_15px_rgba(34,211,238,0.5)]' : (isPastDue ? 'bg-rose-500 border-rose-200 dark:border-rose-900 animate-pulse' : 'bg-slate-300 dark:bg-slate-600 border-slate-100 dark:border-midnight'));
+        let marker = `<div class="absolute left-[-10px] top-8 w-6 h-6 rounded-full border-[6px] ${markerColor} z-10 transition-colors duration-300"></div>`;
+        
+        let cardContent = '';
+
+        if(isSub) {
+          cardContent = `
+            <div class="bg-emerald-50 dark:bg-emerald-950/40 border-2 border-emerald-300 dark:border-emerald-500/30 rounded-[2rem] p-6 flex items-center justify-between shadow-sm">
+              <div>
+                <p class="text-emerald-700 dark:text-emerald-400 font-mono text-xl font-bold mb-1">${timeLabel}</p>
+                <p class="text-slate-900 dark:text-white font-black text-2xl">บันทึกเรียบร้อย</p>
+              </div>
+              <div class="w-14 h-14 rounded-full bg-emerald-100 dark:bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 flex items-center justify-center text-3xl border border-emerald-300 dark:border-emerald-500/30">✅</div>
+            </div>`;
+        }
+        else if(isFuture) {
+          cardContent = `
+            <div class="bg-slate-50 dark:bg-slate-800/40 border-2 border-slate-300 dark:border-slate-700 border-dashed rounded-[2rem] p-6 opacity-70">
+              <p class="text-slate-500 dark:text-slate-400 font-mono text-xl font-bold mb-2">${timeLabel}</p>
+              <p class="text-slate-600 dark:text-slate-500 font-black text-xl">รอถึงรอบเวลา...</p>
+            </div>`;
+        }
+        else {
+          let cardBg = isPastDue ? 'bg-rose-50 dark:bg-rose-950/40 border-rose-400 dark:border-rose-500' : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700';
+          let glowEffect = isActive ? 'shadow-lg dark:shadow-[0_0_30px_rgba(34,211,238,0.15)] border-cyan-400 dark:border-cyan-500/60' : 'shadow-sm';
+          
+          let statusUI = '';
+          if(isPastDue) {
+            statusUI = `
+              <input type="hidden" class="status-val" value="เหตุผิดปกติ">
+              <div class="bg-rose-600 text-white p-5 rounded-2xl font-black text-2xl text-center mb-6 flex items-center justify-center gap-3 animate-pulse border-2 border-rose-400 shadow-md">
+                <span class="text-3xl">⚠️</span> เลยเวลา! บังคับระบุเหตุผล
+              </div>`;
+          } else {
+            statusUI = `
+              <input type="hidden" class="status-val" value="เหตุการณ์ปกติ">
+              <div class="flex gap-4 mb-6">
+                <button type="button" onclick="toggleStatus('${cardId}', false)" class="btn-safe flex-1 py-5 rounded-2xl font-black text-2xl border-2 bg-emerald-500 text-white border-emerald-400 shadow-[0_0_20px_rgba(16,185,129,0.4)] transition-all">✅ ปกติ</button>
+                <button type="button" onclick="toggleStatus('${cardId}', true)" class="btn-danger flex-1 py-5 rounded-2xl font-black text-2xl border-2 bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 border-slate-300 dark:border-slate-700 transition-all">🚨 ผิดปกติ</button>
+              </div>`;
+          }
+
+          cardContent = `
+            <div class="border-[3px] rounded-[2rem] p-6 sm:p-7 transition-colors duration-300 ${cardBg} ${glowEffect}" id="${cardId}">
+              <div class="flex justify-between items-start mb-6">
+                <div class="bg-slate-100 dark:bg-midnight px-4 py-2 rounded-xl border-2 border-slate-300 dark:border-slate-600">
+                  <span class="text-cyan-700 dark:text-cyan-400 font-mono font-black text-3xl">${timeLabel}</span>
+                </div>
+                ${isPastDue ? '<span class="bg-rose-500 text-white text-lg font-black px-4 py-2 rounded-lg animate-pulse shadow-md">ล่าช้า LATE</span>' : ''}
+              </div>
+              
+              <div class="mb-6">
+                <label class="block text-lg font-bold text-slate-600 dark:text-slate-400 mb-3 uppercase">ภารกิจที่ทำ</label>
+                <div class="relative">
+                  <select class="w-full bg-slate-50 dark:bg-slate-950 border-2 border-slate-300 dark:border-slate-600 rounded-2xl px-5 py-5 text-slate-900 dark:text-white appearance-none focus:outline-none focus:border-cyan-500 dark:focus:border-cyan-400 task-sel font-bold text-xl sm:text-2xl shadow-inner transition-colors">
+                    ${taskOpts}
+                  </select>
+                  <div class="pointer-events-none absolute inset-y-0 right-0 flex items-center px-6 text-slate-500 dark:text-slate-400">
+                    <svg class="h-8 w-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M19 9l-7 7-7-7"></path></svg>
+                  </div>
+                </div>
+              </div>
+              
+              <label class="block text-lg font-bold text-slate-600 dark:text-slate-400 mb-3 uppercase">รายงานสถานะ</label>
+              ${statusUI}
+              
+              <div id="detail_${cardId}" class="mb-6 ${isPastDue ? '' : 'hidden'} animate-slide-up">
+                <label class="block text-xl font-black text-rose-600 dark:text-rose-400 mb-3 uppercase flex items-center gap-2"><span>💬</span> พิมพ์รายละเอียด / เหตุผล</label>
+                <textarea class="w-full bg-white dark:bg-slate-950 border-4 border-rose-400 dark:border-rose-500/60 focus:border-rose-500 dark:focus:border-rose-400 rounded-2xl p-5 text-slate-900 dark:text-white font-bold text-xl placeholder-slate-400 dark:placeholder-slate-600 outline-none detail-inp shadow-inner transition-colors" rows="3" placeholder="พิมพ์ข้อความที่นี่..."></textarea>
+              </div>
+              
+              <button onclick="submitSlot(this, '${timeLabel}', ${isPastDue}, '${cardId}')" class="w-full py-6 rounded-2xl font-black text-3xl transition-transform active:scale-95 flex justify-center items-center gap-3 border-2 ${isPastDue ? 'bg-rose-600 text-white border-rose-500 shadow-[0_10px_20px_rgba(225,29,72,0.3)]' : 'bg-cyan-600 dark:bg-cyan-600 text-white border-cyan-500 dark:border-cyan-400 shadow-[0_10px_20px_rgba(8,145,178,0.3)] hover:bg-cyan-500'}">
+                <span>📤</span> ${isPastDue ? 'ส่งรายงานย้อนหลัง' : 'ส่งรายงานรอบนี้'}
+              </button>
+            </div>`;
+        }
+
+        timelineItem.innerHTML = marker + cardContent;
+        container.appendChild(timelineItem);
+      }
+    }
+
+    // บันทึกรอบเวลาลง Firebase โดยตรง
+    async function submitSlot(btn, timeLabel, isPastDue, cardId) {
+      let card = document.getElementById(cardId); 
+      let detail = card.querySelector('.detail-inp') ? card.querySelector('.detail-inp').value : '';
+      let status = isPastDue ? 'เหตุผิดปกติ' : card.querySelector('.status-val').value;
+      let guards = Array.from(document.querySelectorAll('.guard-cb:checked')).map(c => c.value);
+      
+      if(guards.length === 0) {
+        alert("⚠️ ต้องเลือกชื่อ รปภ. ด้านบนก่อนกดส่งครับ");
+        window.scrollTo({ top: 0, behavior: 'smooth' }); 
+        return;
+      }
+      if(status === 'เหตุผิดปกติ' && !detail.trim()) {
+        alert("⚠️ รบกวนพิมพ์รายละเอียดในช่องสีแดงด้วยครับ"); 
+        card.querySelector('.detail-inp').focus(); 
+        return;
+      }
+      
+      btn.disabled = true;
+      let origText = btn.innerHTML;
+      btn.innerHTML = '⏳ กำลังบันทึกข้อมูล...';
+
+      try {
+        const newRecord = {
+          timestamp: new Date().toISOString(),
+          timeSlot: timeLabel,
+          guardNames: guards.join(', '),
+          task: card.querySelector('.task-sel').value,
+          status: status,
+          detail: detail || '-',
+          imageUrl: '-'
+        };
+
+        await db.ref('Report').push(newRecord);
+        vibrate([200]);
+        appData.submittedSlots.push(timeLabel); 
+        generateTimelineSlots();
+      } catch (err) {
+        alert("❌ เกิดข้อผิดพลาดในการบันทึก: " + err.message);
+        btn.disabled = false;
+        btn.innerHTML = origText;
+      }
+    }
+
+    function openHandoverCamera() {
+      document.getElementById('camTriggerSection').classList.add('hidden'); 
+      document.getElementById('handoverCamArea').classList.remove('hidden');
+      document.getElementById('handoverCamArea').classList.add('flex');
+      
+      navigator.mediaDevices.getUserMedia({ video: { facingMode: "user" } })
+        .then(stream => { 
+          hStream = stream; 
+          document.getElementById('hVideo').srcObject = stream; 
+        })
+        .catch(() => alert("❌ ไม่สามารถเปิดกล้องได้"));
+    }
+    
+    function processImage(videoEl, canvasEl) {
+      let MAX_WIDTH = 600; 
+      let w = videoEl.videoWidth, h = videoEl.videoHeight;
+      if (w > MAX_WIDTH) { h *= MAX_WIDTH / w; w = MAX_WIDTH; }
+      canvasEl.width = w; canvasEl.height = h; 
+      canvasEl.getContext('2d').drawImage(videoEl, 0, 0, w, h);
+      return canvasEl.toDataURL('image/jpeg', 0.8);
+    }
+
+    function captureHandover() {
+      let v = document.getElementById('hVideo'), c = document.getElementById('hCanvas'); 
+      currentHandoverImg = processImage(v, c);
+      document.getElementById('hPreview').src = currentHandoverImg;
+      v.classList.add('hidden'); 
+      document.getElementById('hPreview').classList.remove('hidden'); 
+      document.getElementById('hScanLine').classList.add('hidden');
+      document.getElementById('hCaptureBtn').classList.add('hidden'); 
+      document.getElementById('hRetakeBtn').classList.remove('hidden');
+      if(hStream) { hStream.getTracks().forEach(t => t.stop()); hStream = null; }
+      vibrate([100]);
+    }
+    
+    function retakeHandover() {
+      currentHandoverImg = null; 
+      document.getElementById('hVideo').classList.remove('hidden'); 
+      document.getElementById('hPreview').classList.add('hidden'); 
+      document.getElementById('hScanLine').classList.remove('hidden');
+      document.getElementById('hCaptureBtn').classList.remove('hidden'); 
+      document.getElementById('hRetakeBtn').classList.add('hidden');
+      openHandoverCamera();
+    }
+
+    // สร้าง PDF สรุปประจำกะฝั่ง Client-side (HTML2PDF) 100% ฟรี ไม่ต้องพึ่ง Server
+    async function generateAndUploadReportPdf(endTime, handoverName, handoverImgUrl, shiftName, shiftStartTime) {
+      let sStart = appData.shift ? appData.shift.start : 0;
+      let sEnd = appData.shift ? appData.shift.end : 24;
+      let interval = appData.interval || 1;
+      let totalH = (sStart <= sEnd) ? (sEnd - sStart) : ((24 - sStart) + sEnd);
+
+      let expectedSlots = [];
+      for(let i=0; i < totalH; i += interval) {
+        let slotStartH = (sStart + i) % 24; 
+        let slotEndH = (sStart + i + interval) % 24;
+        expectedSlots.push(`${pad(slotStartH)}:00 - ${pad(slotEndH)}:00`);
+      }
+
+      // ดึงรายงานสดล่าสุดของกะนี้
+      const reportSnap = await db.ref('Report').once('value');
+      const rObj = reportSnap.val() || {};
+      let actualRecords = {};
+
+      Object.values(rObj).forEach(r => {
+        if (!r || !r.timestamp) return;
+        let rTime = new Date(r.timestamp);
+        if (rTime >= shiftStartTime && rTime <= endTime && r.timeSlot !== 'ส่งมอบหน้าที่') {
+          actualRecords[r.timeSlot] = { guard: r.guardNames, task: r.task, status: r.status, detail: r.detail };
+        }
+      });
+
+      let tableRows = '';
+      expectedSlots.forEach(slot => {
+        if (actualRecords[slot]) { 
+          tableRows += `<tr><td style="border:1px solid #000;padding:6px;text-align:center;">${slot}</td><td style="border:1px solid #000;padding:6px;text-align:center;">${actualRecords[slot].guard}</td><td style="border:1px solid #000;padding:6px;text-align:center;">${actualRecords[slot].task}</td><td style="border:1px solid #000;padding:6px;text-align:center;">${actualRecords[slot].status}</td><td style="border:1px solid #000;padding:6px;text-align:center;">${actualRecords[slot].detail}</td></tr>`; 
+        } else { 
+          tableRows += `<tr><td style="border:1px solid #000;padding:6px;text-align:center;color:#666;">${slot}</td><td colspan="4" style="border:1px solid #000;padding:6px;text-align:center;color:red;font-style:italic;">ไม่มีการบันทึกข้อมูล</td></tr>`; 
+        }
+      });
+
+      let dateHeaderText = shiftStartTime.toLocaleDateString('th-TH');
+      if (sStart > sEnd) {
+        let nextDay = new Date(shiftStartTime.getTime() + 86400000);
+        dateHeaderText = `${shiftStartTime.toLocaleDateString('th-TH')} - ${nextDay.toLocaleDateString('th-TH')}`;
+      }
+
+      let imgTag = handoverImgUrl && handoverImgUrl !== '-' ? `<div style="margin-top: 10px;"><img src="${handoverImgUrl}" style="max-width: 140px; max-height: 180px; object-fit: contain; border: 1px solid #777; border-radius: 4px;"></div>` : '';
+
+      const pdfHtml = `
+        <div style="font-family: 'Prompt', sans-serif; color: #111; padding: 20px;">
+          <h2 style="text-align:center; color:#1a365d; margin-bottom:4px; font-size: 20px;">รายงานเหตุการณ์ประจำวัน (Security Guard Daily Report)</h2>
+          <p style="text-align:center; margin:0 0 16px 0; font-size: 14px; font-weight: bold;">${COMPANY_NAME}</p>
+          <p style="font-size: 13px; margin-bottom: 12px;"><b>สรุปรายงาน:</b> ${dateHeaderText} | <b>กะ:</b> ${shiftName}</p>
+          <table style="width:100%; border-collapse:collapse; margin-bottom:24px; font-size: 12px;">
+            <thead>
+              <tr style="background-color:#f2f2f2;">
+                <th style="border:1px solid #000; padding:6px;">รอบเวลา</th>
+                <th style="border:1px solid #000; padding:6px;">ผู้รายงาน</th>
+                <th style="border:1px solid #000; padding:6px;">การปฏิบัติงาน</th>
+                <th style="border:1px solid #000; padding:6px;">สถานะ</th>
+                <th style="border:1px solid #000; padding:6px;">หมายเหตุ</th>
+              </tr>
+            </thead>
+            <tbody>${tableRows}</tbody>
+          </table>
+          <table style="width:100%; border:none; margin-top:30px; font-size: 12px;">
+            <tr>
+              <td style="width:50%; text-align:center; vertical-align:top;">
+                <div style="border-bottom:1px dashed #000; width:80%; margin:0 auto 6px auto;"></div>
+                <p style="margin:2px 0;">ผู้ส่งมอบหน้าที่: ${handoverName}</p>
+                <p style="margin:2px 0;">วันที่: ${new Date().toLocaleDateString('th-TH')}</p>
+                ${imgTag}
+              </td>
+              <td style="width:50%; text-align:center; vertical-align:top;">
+                <div style="border-bottom:1px dashed #000; width:80%; margin:0 auto 6px auto;"></div>
+                <p style="margin:2px 0;">ผู้รับมอบหน้าที่ / ฝ่ายบุคคล</p>
+                <p style="margin:2px 0;">วันที่: ......./......./..........</p>
+              </td>
+            </tr>
+          </table>
+        </div>
+      `;
+
+      const renderEl = document.getElementById('pdfRenderContainer');
+      renderEl.innerHTML = pdfHtml;
+      renderEl.style.display = 'block';
+
+      const opt = {
+        margin: [8, 8, 8, 8],
+        filename: `Security_Report_${shiftName}_${Date.now()}.pdf`,
+        image: { type: 'jpeg', quality: 0.98 },
+        html2canvas: { scale: 2, useCORS: true },
+        jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
+      };
+
+      const pdfBlob = await html2pdf().from(renderEl).set(opt).outputPdf('blob');
+      renderEl.style.display = 'none';
+
+      // อัปโหลดเข้า Firebase Storage (ฟรี 100% ภายใต้ Spark Plan)
+      const pdfFileName = `Security_Report_${shiftName}_${Date.now()}.pdf`;
+      const pdfStorageRef = storage.ref(`reports/${pdfFileName}`);
+      const pdfSnapshot = await pdfStorageRef.put(pdfBlob, { contentType: 'application/pdf' });
+      const pdfDownloadUrl = await pdfSnapshot.ref.getDownloadURL();
+      return pdfDownloadUrl;
+    }
+    
+    async function submitHandover() {
+      let now = new Date();
+      let nowTs = now.getTime(); 
+      let shiftName = appData.shift.name;
+
+      if (nowTs < appData.lockStartTs || nowTs > appData.lockEndTs) { 
+        return alert(`⚠️ ระบบล็อกเวลา
+ส่งเวรได้เฉพาะเวลาที่กำหนดเท่านั้น`); 
+      }
+      let name = document.getElementById('handoverName').value.trim();
+      if(!name) { 
+        alert("⚠️ พิมพ์ชื่อของคุณก่อนกดส่งเวรครับ"); 
+        document.getElementById('handoverName').focus(); 
+        return; 
+      }
+      if(!currentHandoverImg) {
+        return alert("⚠️ ต้องถ่ายรูปเพื่อยืนยันตัวตนก่อนครับ");
+      }
+      
+      let isConfirm = confirm(`🚨 ยืนยันปิดเวรหรือไม่? 🚨
+ระบบจะสรุปผลและส่งรายงานทันที`);
+      if(!isConfirm) return;
+      
+      let btn = document.getElementById('finalSubmitBtn');
+      btn.disabled = true;
+      btn.innerHTML = '⏳ กำลังอัปโหลดภาพและสร้าง PDF...';
+
+      try {
+        // 1. อัปโหลดรูปถ่ายเข้า Firebase Storage
+        const imgName = `Handover_${Date.now()}.jpg`;
+        const imgStorageRef = storage.ref(`handovers/${imgName}`);
+        const imgSnapshot = await imgStorageRef.putString(currentHandoverImg, 'data_url');
+        const imageUrl = await imgSnapshot.ref.getDownloadURL();
+
+        // 2. สร้าง PDF และอัปโหลดเข้า Firebase Storage
+        const pdfUrl = await generateAndUploadReportPdf(now, name, imageUrl, shiftName, appData.shiftStartTime);
+
+        // 3. บันทึกประวัติปิดกะลง Firebase Realtime Database
+        const newRecord = {
+          timestamp: now.toISOString(),
+          timeSlot: 'ส่งมอบหน้าที่',
+          guardNames: name,
+          shiftName: shiftName,
+          task: 'ส่งมอบหน้าที่',
+          status: 'เหตุการณ์ปกติ',
+          detail: 'ปิดกะ',
+          imageUrl: imageUrl,
+          pdfUrl: pdfUrl
+        };
+
+        await db.ref('Report').push(newRecord);
+        vibrate([200]);
+        alert("✅ ส่งเวรเรียบร้อย ไฟล์ PDF บันทึกเข้า Firebase แล้ว!");
+        location.reload();
+      } catch (err) {
+        alert("❌ เกิดข้อผิดพลาดในการส่งเวร: " + err.message);
+        btn.disabled = false;
+        btn.innerHTML = '<span>✅</span> ยืนยันปิดเวร';
+      }
+    }
+
+    function fhCapture() {
+      let v = document.getElementById('fhVideo'), c = document.getElementById('fhCanvas'); 
+      fhImg = processImage(v, c);
+      document.getElementById('fhPreview').src = fhImg;
+      v.classList.add('hidden'); 
+      document.getElementById('fhPreview').classList.remove('hidden'); 
+      document.getElementById('fhScanLine').classList.add('hidden');
+      document.getElementById('fhCaptureBtn').classList.add('hidden'); 
+      document.getElementById('fhRetakeBtn').classList.remove('hidden');
+      if(fhStream) { fhStream.getTracks().forEach(t => t.stop()); fhStream = null; }
+      vibrate([100]);
+    }
+    
+    function fhRetake() {
+      fhImg = null; 
+      document.getElementById('fhVideo').classList.remove('hidden'); 
+      document.getElementById('fhPreview').classList.add('hidden'); 
+      document.getElementById('fhScanLine').classList.remove('hidden');
+      document.getElementById('fhCaptureBtn').classList.remove('hidden'); 
+      document.getElementById('fhRetakeBtn').classList.add('hidden');
+      
+      navigator.mediaDevices.getUserMedia({ video: { facingMode: "user" } })
+        .then(stream => { fhStream = stream; document.getElementById('fhVideo').srcObject = stream; })
+        .catch(e => console.log(e));
+    }
+    
+    async function fhSubmit() {
+      let name = document.getElementById('fhName').value.trim();
+      if(!name || !fhImg) return alert("⚠️ กรุณาพิมพ์ชื่อและถ่ายรูป");
+      let btn = document.getElementById('fhSubmitBtn'); 
+      btn.disabled = true;
+      btn.innerHTML = '⏳ กำลังประมวลผลเคลียร์เวร...';
+
+      try {
+        const now = new Date();
+        const imgName = `Handover_FH_${Date.now()}.jpg`;
+        const imgStorageRef = storage.ref(`handovers/${imgName}`);
+        const imgSnapshot = await imgStorageRef.putString(fhImg, 'data_url');
+        const imageUrl = await imgSnapshot.ref.getDownloadURL();
+
+        // คำนวณช่วงเวลากะตกค้าง
+        let missedShiftName = appData.missedShiftName;
+        let shiftStartTime = new Date(now.getTime() - 12 * 3600 * 1000);
+
+        const pdfUrl = await generateAndUploadReportPdf(now, name, imageUrl, missedShiftName, shiftStartTime);
+
+        const newRecord = {
+          timestamp: now.toISOString(),
+          timeSlot: 'ส่งมอบหน้าที่',
+          guardNames: name,
+          shiftName: missedShiftName,
+          task: 'ส่งมอบหน้าที่',
+          status: 'เหตุการณ์ปกติ',
+          detail: 'ปิดกะตกค้าง (Force Handover)',
+          imageUrl: imageUrl,
+          pdfUrl: pdfUrl
+        };
+
+        await db.ref('Report').push(newRecord);
+        vibrate([200]);
+        alert("✅ เคลียร์เวรตกค้างสำเร็จ โหลดระบบใหม่...");
+        location.reload();
+      } catch (err) {
+        alert("❌ เกิดข้อผิดพลาด: " + err.message);
+        btn.disabled = false;
+        btn.innerHTML = 'เคลียร์เวรตกค้างทันที';
+      }
+    }
+  </script>
+</body>
+</html>
