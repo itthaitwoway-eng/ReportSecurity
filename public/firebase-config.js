@@ -19,4 +19,13 @@ if (!firebase.apps.length) {
 
 const db = firebase.database();
 const storage = firebase.storage();
+// จำกัดเวลา retry ของ Storage (ค่าเริ่มต้น 10 นาที ทำให้หน้าจอดูเหมือนค้าง)
+storage.setMaxUploadRetryTime(15000);
+storage.setMaxOperationRetryTime(15000);
+// true = อัปโหลดรูป/PDF ขึ้น Firebase Storage (ต้องเปิดใช้ Storage ให้ใช้งานได้ก่อน)
+// false = เก็บทุกอย่างใน Realtime Database อย่างเดียว (เร็วและไม่ค้าง)
+const USE_STORAGE = false;
+// URL ของ Apps Script Web app เดิม (ลงท้ายด้วย /exec) ใช้เก็บรูป+PDF ลง Google Drive
+// ถ้าเว้นว่าง = ไม่ใช้ Apps Script (เก็บแค่ใน Firebase)
+const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwHyEcFIBJFboRQ8VUaid2mRk8XGSvUrQ5IqCC_kxG98PF4Gyz5A42qgst_uNgCwE8/exec";
 const COMPANY_NAME = "บริษัท ไทยทูเวย์ แฟบริค จำกัด";
