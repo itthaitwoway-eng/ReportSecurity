@@ -709,10 +709,86 @@
       
       generateTimelineSlots();
       if (localStorage.getItem('timelineCols') === '2') { setTimelineGridMode(2); }
+      syncMissedSlotsToSystemLog();
+
+      if (window.missedSlotCheckTimer) clearInterval(window.missedSlotCheckTimer);
+      window.missedSlotCheckTimer = setInterval(() => {
+        generateTimelineSlots();
+        if (localStorage.getItem('timelineCols') === '2') { setTimelineGridMode(2); }
+        syncMissedSlotsToSystemLog();
+      }, 5 * 60 * 1000);
 
       let lStartText = appData.shift.lockStart || pad(appData.shift.start) + ":00"; 
       let lEndText = appData.shift.lockEnd || pad(appData.shift.end) + ":00";
       document.getElementById('lockNoticeText').innerHTML = `ส่งเวรได้เฉพาะช่วงเวลา <span class="text-amber-600 dark:text-amber-400 font-black text-xl sm:text-2xl ml-1">${lStartText} - ${lEndText} น.</span>`;
+    }
+
+    // ============================================================================
+    // 📌 ระบบบันทึกประวัติรอบเวลาที่ รปภ. ขาดส่ง หรือ ส่งรายงานล่าช้า ลงในโหนด SystemLog
+    // ============================================================================
+    const loggedMissedSlotCache = {};
+
+    function getShiftDateStr(dObj) {
+      const d = dObj ? new Date(dObj) : new Date();
+      return `${pad(d.getDate())}/${pad(d.getMonth() + 1)}/${d.getFullYear()}`;
+    }
+
+    function buildSlotLogKey(shiftStartTime, shiftName, timeLabel) {
+      const d = shiftStartTime ? new Date(shiftStartTime) : new Date();
+      const dateKey = `${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}`;
+      const safeShift = (shiftName || 'shift').replace(/[.#$\[\]\s\/]/g, '_');
+      const safeSlot = (timeLabel || 'slot').replace(/[^0-9]/g, '');
+      return `log_${dateKey}_${safeShift}_${safeSlot}`;
+    }
+
+    async function syncMissedSlotsToSystemLog() {
+      try {
+        if (isDemoMode || typeof db === 'undefined' || !db || !appData || !appData.shift) return;
+        const sStart = appData.shift.start;
+        const sEnd = appData.shift.end;
+        const totalH = (sStart <= sEnd) ? (sEnd - sStart) : ((24 - sStart) + sEnd);
+        const now = new Date();
+        const cH = now.getHours();
+        const cM = now.getMinutes();
+
+        const checkedGuards = Array.from(document.querySelectorAll('.guard-cb:checked')).map(c => c.value);
+        const guardNamesStr = checkedGuards.length > 0
+          ? checkedGuards.join(', ')
+          : ((appData.guards && appData.guards.length > 0) ? appData.guards.join(', ') : 'ยังไม่ระบุชื่อ รปภ.');
+
+        for (let i = 0; i < totalH; i += appData.interval) {
+          const slotStartH = (sStart + i) % 24;
+          const slotEndH = (sStart + i + appData.interval) % 24;
+          const timeLabel = `${pad(slotStartH)}:00 - ${pad(slotEndH)}:00`;
+          const isSub = appData.submittedSlots.includes(timeLabel);
+          const endM = (slotEndH < sStart) ? (slotEndH + 24) * 60 : slotEndH * 60;
+          const nowM = (cH < sStart) ? (cH + 24) * 60 + cM : cH * 60 + cM;
+          const isPastDue = (!isSub && nowM > endM);
+
+          if (isPastDue) {
+            const logKey = buildSlotLogKey(appData.shiftStartTime, appData.shift.name, timeLabel);
+            if (!loggedMissedSlotCache[logKey]) {
+              const snap = await db.ref('SystemLog/' + logKey).once('value');
+              if (!snap.exists()) {
+                await db.ref('SystemLog/' + logKey).set({
+                  timestamp: new Date().toISOString(),
+                  date: getShiftDateStr(appData.shiftStartTime),
+                  shiftName: appData.shift.name,
+                  timeSlot: timeLabel,
+                  guardNames: guardNamesStr,
+                  task: '-',
+                  type: 'MISSED_REPORT',
+                  status: 'ขาดส่งตามรอบเวลา (ยังไม่บันทึก)',
+                  detail: 'เลยกำหนดเวลาส่งรายงานประจำรอบแล้วยังไม่มีการกดบันทึก'
+                });
+              }
+              loggedMissedSlotCache[logKey] = true;
+            }
+          }
+        }
+      } catch (err) {
+        console.warn("SystemLog sync warning:", err);
+      }
     }
 
     function toggleStatus(cardId, isDanger) {
@@ -923,6 +999,24 @@
 
         if (!isDemoMode && typeof db !== 'undefined' && db) {
           await db.ref('Report').push(newRecord);
+
+          // หากเป็นการส่งรายงานย้อนหลัง (ล่าช้าเกินรอบเวลา) ให้บันทึกประวัติลงโหนด SystemLog
+          if (isPastDue) {
+            const logKey = buildSlotLogKey(appData.shiftStartTime, appData.shift ? appData.shift.name : '-', timeLabel);
+            const nowTimeText = `${pad(new Date().getHours())}:${pad(new Date().getMinutes())} น.`;
+            await db.ref('SystemLog/' + logKey).set({
+              timestamp: new Date().toISOString(),
+              date: getShiftDateStr(appData.shiftStartTime),
+              shiftName: appData.shift ? appData.shift.name : '-',
+              timeSlot: timeLabel,
+              guardNames: guards.join(', '),
+              task: card.querySelector('.task-sel').value,
+              type: 'LATE_REPORT',
+              status: `ส่งรายงานล่าช้า (บันทึกเมื่อ ${nowTimeText})`,
+              detail: detail || '-'
+            });
+            loggedMissedSlotCache[logKey] = true;
+          }
         }
         vibrate([200]);
         appData.submittedSlots.push(timeLabel); 
@@ -1256,9 +1350,31 @@
 
       try {
         const now = new Date();
+        const shiftStartTimeForLog = new Date(now.getTime() - 12 * 3600 * 1000);
+        const logForceHandover = async () => {
+          try {
+            if (!isDemoMode && typeof db !== 'undefined' && db) {
+              await db.ref('SystemLog').push({
+                timestamp: now.toISOString(),
+                date: getShiftDateStr(shiftStartTimeForLog),
+                shiftName: appData.missedShiftName || '-',
+                timeSlot: 'ส่งมอบหน้าที่ (ปิดเวรตกค้าง)',
+                guardNames: name,
+                task: 'ส่งมอบหน้าที่',
+                type: 'FORCE_HANDOVER',
+                status: 'บังคับปิดเวรตกค้าง (Force Handover)',
+                detail: 'กะก่อนหน้าไม่ได้กดปิดเวรตามเวลาที่กำหนด'
+              });
+            }
+          } catch (logErr) {
+            console.warn('SystemLog force handover warning:', logErr);
+          }
+        };
+
         if (hasAppsScript()) {
           try {
             await handoverViaAppsScript(name, appData.missedShiftName, fhImg);
+            await logForceHandover();
             vibrate([200]);
             alert("✅ เคลียร์เวรตกค้างสำเร็จ โหลดระบบใหม่...");
             location.reload();
@@ -1289,6 +1405,7 @@
         };
 
         await db.ref('Report').push(newRecord);
+        await logForceHandover();
         vibrate([200]);
         alert("✅ เคลียร์เวรตกค้างสำเร็จ โหลดระบบใหม่...");
         location.reload();
